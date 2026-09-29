@@ -16,7 +16,7 @@ from astrbot.api.event import MessageChain, filter
 from astrbot.api.message_components import Image, Plain
 
 from .catalog import WatchSpec, compare_catalogs, fetch_catalog
-from .renderer import paginate_notification, render_page
+from .renderer import format_notification, render_card
 
 STATE_KEY = "model_watcher_state_v1"
 
@@ -91,15 +91,31 @@ class ModelWatcher(star.Star):
                     "pending": [],
                 }
                 self._state["entries"][entry_id] = state
-            for notification in state["pending"]:
-                notification["targets"] = {
-                    target: cursor
-                    for target, cursor in notification["targets"].items()
-                    if target in spec.targets
-                }
-            state["pending"] = [
-                notice for notice in state["pending"] if notice["targets"]
-            ]
+            # Old entries compared all attributes. Discard obsolete deliveries
+            # when switching rules, but retain the raw catalog baseline.
+            if state.get("comparison_mode", "模型 ID 和属性") != spec.comparison_mode:
+                state["pending"] = []
+            state["comparison_mode"] = spec.comparison_mode
+            pending = []
+            for notice in state["pending"]:
+                if "text" in notice:
+                    targets = [
+                        target for target in notice["targets"] if target in spec.targets
+                    ]
+                    if targets:
+                        pending.append({"text": notice["text"], "targets": targets})
+                    continue
+                # Preserve only the unsent part of each legacy paginated notice.
+                pages = notice["pages"]
+                remaining: dict[int, list[str]] = {}
+                for target, cursor in notice["targets"].items():
+                    if target in spec.targets and 0 <= cursor < len(pages):
+                        remaining.setdefault(cursor, []).append(target)
+                for cursor, targets in remaining.items():
+                    pending.append(
+                        {"text": "\n\n".join(pages[cursor:]), "targets": targets}
+                    )
+            state["pending"] = pending
         if changed:
             self.config.save_config()
         self._state["entries"] = {
@@ -122,7 +138,7 @@ class ModelWatcher(star.Star):
                     trust_env=False,
                     timeout=httpx.Timeout(15),
                     follow_redirects=False,
-                    headers={"User-Agent": "AstrBot-Model-Watcher/0.0.6"},
+                    headers={"User-Agent": "AstrBot-Model-Watcher/0.0.7"},
                 )
             except Exception as exc:
                 logger.warning(
@@ -184,7 +200,12 @@ class ModelWatcher(star.Star):
                 state = copy.deepcopy(existing)
                 previous = state["snapshot"]
                 if previous is not None and spec.targets:
-                    changes = compare_catalogs(previous, current, spec.ignored_paths)
+                    changes = compare_catalogs(
+                        previous,
+                        current,
+                        spec.ignored_paths,
+                        compare_attributes=spec.comparison_mode == "模型 ID 和属性",
+                    )
                     if changes["added"] or changes["removed"] or changes["changed"]:
                         zone_name = str(
                             self.context.get_config().get("timezone") or ""
@@ -204,9 +225,9 @@ class ModelWatcher(star.Star):
                             "count": len(current),
                             "changes": changes,
                         }
-                        pages = await asyncio.to_thread(paginate_notification, notice)
+                        text = await asyncio.to_thread(format_notification, notice)
                         state["pending"].append(
-                            {"pages": pages, "targets": dict.fromkeys(spec.targets, 0)}
+                            {"text": text, "targets": list(spec.targets)}
                         )
                 state["snapshot"] = current
                 # Persist snapshot and outbox together. Roll back on storage failure.
@@ -220,80 +241,64 @@ class ModelWatcher(star.Star):
         await self._deliver(spec)
 
     async def _deliver(self, spec: WatchSpec) -> None:
-        """Deliver pages independently and checkpoint each target's progress.
+        """Send at most one complete notification per target in each cycle.
 
         Args:
             spec: Provider owning the persisted notification queue.
         """
         state = self._state["entries"][spec.entry_id]
-        blocked: set[str] = set()
+        attempted: set[str] = set()
         for notice in list(state["pending"]):
-            pages = notice["pages"]
-            # At most one rendered page is held at a time, regardless of queue size.
-            for index, text in enumerate(pages):
-                targets = [
-                    target
-                    for target, cursor in notice["targets"].items()
-                    if target not in blocked and cursor == index
-                ]
-                if not targets:
-                    continue
+            targets = [
+                target for target in notice["targets"] if target not in attempted
+            ]
+            if not targets:
+                continue
+            try:
+                png = await asyncio.to_thread(render_card, notice["text"])
+            except Exception as exc:
+                logger.warning(
+                    "Model watcher card rendering failed (%s); using text.",
+                    type(exc).__name__,
+                )
+                png = None
+            for target in targets:
+                attempted.add(target)
+                chain = (
+                    MessageChain([Image.fromBytes(png)])
+                    if png
+                    else MessageChain([Plain(f"模型列表更新\n{notice['text']}")])
+                )
                 try:
-                    png = await asyncio.to_thread(
-                        render_page, text, index + 1, len(pages)
+                    # An unavailable adapter should retain its pending delivery.
+                    platform_id = target.split(":", 1)[0]
+                    adapter = next(
+                        (
+                            p
+                            for p in self.context.platform_manager.get_insts()
+                            if str(p.meta().id) == platform_id
+                        ),
+                        None,
                     )
+                    if adapter is None or not getattr(
+                        adapter.meta(), "support_proactive_message", True
+                    ):
+                        continue
+                    sent = await asyncio.wait_for(
+                        self.context.send_message(target, chain), timeout=30
+                    )
+                    if not sent:
+                        continue
                 except Exception as exc:
                     logger.warning(
-                        "Model watcher card rendering failed (%s); using text.",
+                        "Model watcher delivery failed for entry %s (%s).",
+                        spec.entry_id,
                         type(exc).__name__,
                     )
-                    png = None
-                for target in targets:
-                    chain = (
-                        MessageChain([Image.fromBytes(png)])
-                        if png
-                        else MessageChain(
-                            [Plain(f"模型列表更新 [{index + 1}/{len(pages)}]\n{text}")]
-                        )
-                    )
-                    try:
-                        # An unavailable adapter should retain its pending delivery.
-                        platform_id = target.split(":", 1)[0]
-                        adapter = next(
-                            (
-                                p
-                                for p in self.context.platform_manager.get_insts()
-                                if str(p.meta().id) == platform_id
-                            ),
-                            None,
-                        )
-                        if adapter is None or not getattr(
-                            adapter.meta(), "support_proactive_message", True
-                        ):
-                            blocked.add(target)
-                            continue
-                        sent = await asyncio.wait_for(
-                            self.context.send_message(target, chain), timeout=30
-                        )
-                        if not sent:
-                            blocked.add(target)
-                            continue
-                    except Exception as exc:
-                        logger.warning(
-                            "Model watcher delivery failed for entry %s (%s).",
-                            spec.entry_id,
-                            type(exc).__name__,
-                        )
-                        blocked.add(target)
-                        continue
-                    async with self._state_lock:
-                        notice["targets"][target] = index + 1
-                        await self.put_kv_data(STATE_KEY, copy.deepcopy(self._state))
-            notice["targets"] = {
-                target: cursor
-                for target, cursor in notice["targets"].items()
-                if cursor < len(pages)
-            }
+                    continue
+                async with self._state_lock:
+                    notice["targets"].remove(target)
+                    await self.put_kv_data(STATE_KEY, copy.deepcopy(self._state))
         async with self._state_lock:
             state["pending"] = [
                 notice for notice in state["pending"] if notice["targets"]

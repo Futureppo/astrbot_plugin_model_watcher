@@ -20,7 +20,7 @@ class Config(dict):
 @pytest_asyncio.fixture
 async def watcher_factory(monkeypatch):
     plugins = []
-    monkeypatch.setattr(main, "render_page", lambda *args: b"image")
+    monkeypatch.setattr(main, "render_card", lambda *args: b"image")
 
     async def build(entries=None, stored=None):
         context = SimpleNamespace(
@@ -70,7 +70,7 @@ async def test_baseline_changes_and_restart(watcher_factory, monkeypatch):
         ]
     )
     render = Mock(return_value=b"image")
-    monkeypatch.setattr(main, "render_page", render)
+    monkeypatch.setattr(main, "render_card", render)
     spec = plugin._specs[0]
     plugin._clients[spec.entry_id] = AsyncMock()
     fetch = AsyncMock(
@@ -109,9 +109,9 @@ async def test_failed_target_retries_during_api_failure(watcher_factory, monkeyp
     await plugin._run_cycle(spec)
     plugin.context.send_message.side_effect = [True, RuntimeError("offline")]
     await plugin._run_cycle(spec)
-    assert plugin._state["entries"]["one"]["pending"][0]["targets"] == {
-        "bot:FriendMessage:2": 0
-    }
+    assert plugin._state["entries"]["one"]["pending"][0]["targets"] == [
+        "bot:FriendMessage:2"
+    ]
     plugin.context.send_message.reset_mock(side_effect=True)
     await plugin._run_cycle(spec)
     plugin.context.send_message.assert_awaited_once()
@@ -121,7 +121,7 @@ async def test_failed_target_retries_during_api_failure(watcher_factory, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_page_cursors_survive_restart_and_removed_targets(
+async def test_legacy_pages_merge_only_unsent_content_and_keep_targets(
     watcher_factory, monkeypatch
 ):
     plugin = await watcher_factory()
@@ -138,11 +138,11 @@ async def test_page_cursors_survive_restart_and_removed_targets(
         umo_whitelist=[spec.targets[0], "bot:GroupMessage:new"],
     )
     reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
-    assert reloaded._state["entries"]["one"]["pending"][0]["targets"] == {
-        spec.targets[0]: 1
-    }
+    notice = reloaded._state["entries"]["one"]["pending"][0]
+    assert notice["targets"] == [spec.targets[0]]
+    assert notice["text"] == "second\n\nthird"
     await reloaded._deliver(reloaded._specs[0])
-    assert reloaded.context.send_message.await_count == 2
+    assert reloaded.context.send_message.await_count == 1
     assert all(
         call.args[0] == spec.targets[0]
         for call in reloaded.context.send_message.call_args_list
@@ -215,18 +215,18 @@ async def test_text_fallback_and_unavailable_platform(watcher_factory, monkeypat
     state = plugin._state["entries"]["one"]
     state["pending"] = [
         {
-            "pages": ["完整变更内容"],
-            "targets": {"bot:GroupMessage:1": 0, "absent:GroupMessage:9": 0},
+            "text": "完整变更内容",
+            "targets": ["bot:GroupMessage:1", "absent:GroupMessage:9"],
         }
     ]
     monkeypatch.setattr(
-        main, "render_page", lambda *args: (_ for _ in ()).throw(OSError("no font"))
+        main, "render_card", lambda *args: (_ for _ in ()).throw(OSError("no font"))
     )
     await plugin._deliver(plugin._specs[0])
     plugin.context.send_message.assert_awaited_once()
     chain = plugin.context.send_message.call_args.args[1]
     assert "完整变更内容" in chain.chain[0].text
-    assert state["pending"][0]["targets"] == {"absent:GroupMessage:9": 0}
+    assert state["pending"][0]["targets"] == ["absent:GroupMessage:9"]
 
 
 @pytest.mark.asyncio
@@ -296,3 +296,149 @@ async def test_slow_provider_does_not_block_another(watcher_factory, monkeypatch
     assert plugin._state["entries"]["two"]["snapshot"] == {"two": "two"}
     release.set()
     await task
+
+
+@pytest.mark.asyncio
+async def test_openrouter_upgrade_clears_backlog_and_keeps_baseline(
+    watcher_factory, monkeypatch
+):
+    entry = {
+        "entry_id": "or",
+        "__template_key": "openrouter",
+        "name": "Renamed",
+        "base_url": "https://openrouter.ai/api",
+        "umo_whitelist": ["bot:GroupMessage:1"],
+    }
+    plugin = await watcher_factory(entries=[entry])
+    state = plugin._state["entries"]["or"]
+    state.pop("comparison_mode")
+    state["snapshot"] = {"a": {"id": "a", "pricing": {"prompt": "1"}}}
+    state["pending"] = [
+        {"pages": ["old attribute change"] * 10, "targets": {"bot:GroupMessage:1": 0}}
+        for _ in range(20)
+    ]
+    reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
+    assert reloaded._state["entries"]["or"]["snapshot"] == state["snapshot"]
+    assert reloaded._state["entries"]["or"]["pending"] == []
+    assert reloaded.put_kv_data.call_args.args[1]["entries"]["or"]["pending"] == []
+    reloaded._clients["or"] = AsyncMock()
+    new = {"a": {"id": "a", "pricing": {"prompt": "2"}}}
+    monkeypatch.setattr(main, "fetch_catalog", AsyncMock(return_value=new))
+    await reloaded._run_cycle(reloaded._specs[0])
+    reloaded.context.send_message.assert_not_called()
+    assert reloaded._state["entries"]["or"]["snapshot"] == new
+    monkeypatch.setattr(
+        main, "fetch_catalog", AsyncMock(return_value={**new, "b": {"id": "b"}})
+    )
+    await reloaded._run_cycle(reloaded._specs[0])
+    reloaded.context.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_openrouter_new_failed_delivery_survives_restart(
+    watcher_factory, monkeypatch
+):
+    entry = {
+        "entry_id": "or",
+        "base_url": "https://openrouter.ai/api",
+        "umo_whitelist": ["bot:GroupMessage:1"],
+    }
+    plugin = await watcher_factory(entries=[entry])
+    plugin._state["entries"]["or"]["snapshot"] = {"a": "a"}
+    plugin._clients["or"] = AsyncMock()
+    plugin.context.send_message.return_value = False
+    monkeypatch.setattr(
+        main, "fetch_catalog", AsyncMock(return_value={"a": "a", "b": "b"})
+    )
+    await plugin._run_cycle(plugin._specs[0])
+    assert len(plugin._state["entries"]["or"]["pending"]) == 1
+    reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
+    reloaded._clients["or"] = AsyncMock()
+    await reloaded._run_cycle(reloaded._specs[0])
+    reloaded.context.send_message.assert_awaited_once()
+    assert reloaded._state["entries"]["or"]["pending"] == []
+    again = await watcher_factory(entries=[entry], stored=reloaded._state)
+    again._clients["or"] = AsyncMock()
+    await again._run_cycle(again._specs[0])
+    again.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,expected", [("仅模型 ID", 0), ("模型 ID 和属性", 1)])
+async def test_explicit_comparison_mode_controls_attribute_notifications(
+    watcher_factory, monkeypatch, mode, expected
+):
+    plugin = await watcher_factory(
+        entries=[
+            {
+                "entry_id": "or",
+                "base_url": "https://openrouter.ai/api",
+                "comparison_mode": mode,
+                "umo_whitelist": ["bot:GroupMessage:1"],
+            }
+        ]
+    )
+    plugin._state["entries"]["or"]["snapshot"] = {"a": {"id": "a", "pricing": "1"}}
+    plugin._clients["or"] = AsyncMock()
+    monkeypatch.setattr(
+        main,
+        "fetch_catalog",
+        AsyncMock(return_value={"a": {"id": "a", "pricing": "2"}}),
+    )
+    await plugin._run_cycle(plugin._specs[0])
+    assert plugin.context.send_message.await_count == expected
+
+
+@pytest.mark.asyncio
+async def test_mode_switch_discards_old_notices_without_resetting_snapshot(
+    watcher_factory,
+):
+    plugin = await watcher_factory()
+    state = plugin._state["entries"]["one"]
+    state["snapshot"] = {"a": "a"}
+    state["pending"] = [{"text": "old attributes", "targets": ["bot:GroupMessage:1"]}]
+    entries = [{**plugin.config["providers"][0], "comparison_mode": "仅模型 ID"}]
+    reloaded = await watcher_factory(entries=entries, stored=plugin._state)
+    assert reloaded._state["entries"]["one"]["snapshot"] == {"a": "a"}
+    assert reloaded._state["entries"]["one"]["pending"] == []
+
+
+@pytest.mark.asyncio
+async def test_backlog_sends_one_notice_per_target_per_cycle(watcher_factory):
+    plugin = await watcher_factory()
+    targets = list(plugin._specs[0].targets)
+    plugin._state["entries"]["one"]["pending"] = [
+        {"text": f"notice {index}", "targets": list(targets)} for index in range(4)
+    ]
+    await plugin._deliver(plugin._specs[0])
+    assert plugin.context.send_message.await_count == len(targets)
+    assert len(plugin._state["entries"]["one"]["pending"]) == 3
+    reloaded = await watcher_factory(stored=plugin._state)
+    await reloaded._deliver(reloaded._specs[0])
+    assert reloaded.context.send_message.await_count == len(targets)
+    assert len(reloaded._state["entries"]["one"]["pending"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_many_changes_generate_one_message_per_target(
+    watcher_factory, monkeypatch
+):
+    plugin = await watcher_factory()
+    plugin._state["entries"]["one"]["snapshot"] = {}
+    plugin._clients["one"] = AsyncMock()
+    monkeypatch.setattr(
+        main,
+        "fetch_catalog",
+        AsyncMock(return_value={f"m-{i:03d}": f"m-{i:03d}" for i in range(150)}),
+    )
+    render = Mock(return_value=b"image")
+    monkeypatch.setattr(main, "render_card", render)
+    await plugin._run_cycle(plugin._specs[0])
+    render.assert_called_once()
+    assert '"m-000"' in render.call_args.args[0]
+    assert '"m-149"' in render.call_args.args[0]
+    assert plugin.context.send_message.await_count == 2
+    assert all(
+        len(call.args[1].chain) == 1
+        for call in plugin.context.send_message.call_args_list
+    )

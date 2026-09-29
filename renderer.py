@@ -1,4 +1,4 @@
-"""Local, paginated model change cards with a complete text fallback."""
+"""Single-image model change cards with a complete text fallback."""
 
 from __future__ import annotations
 
@@ -13,9 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 WIDTH = 1200
-HEIGHT = 1700
 BODY_WIDTH = WIDTH - 128
-LINES_PER_PAGE = 39
+MAX_IMAGE_PIXELS = 40_000_000
 
 
 @lru_cache(maxsize=6)
@@ -51,14 +50,14 @@ def load_font(size: int) -> ImageFont.FreeTypeFont:
     raise OSError("A Chinese font is required for model watcher cards")
 
 
-def paginate_notification(notification: dict[str, Any]) -> list[str]:
-    """Prepare stable text pages for image delivery and restart-safe cursors.
+def format_notification(notification: dict[str, Any]) -> str:
+    """Prepare one complete notification for image or text delivery.
 
     Args:
         notification: Entry name, base API URL, detection time, count, and changes.
 
     Returns:
-        Complete text pages, including every change and all old/new values.
+        Wrapped text containing every change and all old/new values.
     """
     changes = notification["changes"]
     lines = [
@@ -69,7 +68,6 @@ def paginate_notification(notification: dict[str, Any]) -> list[str]:
         f"新增 {len(changes['added'])} · 下架 {len(changes['removed'])} · 属性变化 {len(changes['changed'])}",
         "",
     ]
-    header_line_count = len(lines)
     for key, label in (("added", "新增模型"), ("removed", "下架模型")):
         if changes[key]:
             lines.append(f"【{label}】")
@@ -96,8 +94,8 @@ def paginate_notification(notification: dict[str, Any]) -> list[str]:
         font = load_font(24)
     except OSError:
         font = None
-    wrapped, header = [], []
-    for line_index, line in enumerate(lines):
+    wrapped = []
+    for line in lines:
         # Source strings can contain newlines; keep each resulting line visible.
         for paragraph in line.expandtabs(4).split("\n"):
             current = ""
@@ -110,49 +108,30 @@ def paginate_notification(notification: dict[str, Any]) -> list[str]:
                 else:
                     current = candidate
             wrapped.append(current)
-        if line_index == header_line_count - 1:
-            header = list(wrapped)
-    # Keep subsequent cards identifiable when a notification spans many pages.
-    # Unusually long provider names remain complete on the first pages.
-    if len(header) > 12 or sum(len(line) + 1 for line in header) > 900:
-        header = ["（续页，条目名称、网址与检测时间见首页）", ""]
-    # Text fallbacks stay under 1,800 characters even on stricter adapters.
-    pages, page = [], []
-    length = 0
-    for line in wrapped:
-        if page and (len(page) >= LINES_PER_PAGE or length + len(line) + 1 > 1800):
-            pages.append("\n".join(page))
-            page = list(header)
-            length = sum(len(item) + 1 for item in page)
-        page.append(line)
-        length += len(line) + 1
-    if page:
-        pages.append("\n".join(page))
-    return pages
+    return "\n".join(wrapped)
 
 
-def render_page(text: str, page_number: int, page_count: int) -> bytes:
-    """Render a pre-paginated notification with a fixed maximum page height.
+def render_card(text: str) -> bytes:
+    """Render all changes in one card whose height follows its content.
 
     Args:
-        text: Page text created by ``paginate_notification``.
-        page_number: One-based page index.
-        page_count: Total number of pages in the notification.
+        text: Wrapped notification text created by ``format_notification``.
 
     Returns:
         PNG image bytes.
 
     Raises:
         OSError: No Chinese font is available.
-        ValueError: Persisted text cannot fit the current font metrics.
+        ValueError: Text exceeds the font width or safe image allocation size.
     """
     title_font, body_font, footer_font = load_font(42), load_font(24), load_font(20)
     lines = text.split("\n")
-    if len(lines) > LINES_PER_PAGE or any(
-        body_font.getlength(line) > BODY_WIDTH + 1 for line in lines
-    ):
-        raise ValueError("Page does not fit the current font")
-    height = min(HEIGHT, max(480, 206 + len(lines) * 34 + 150))
+    if any(body_font.getlength(line) > BODY_WIDTH + 1 for line in lines):
+        raise ValueError("Card does not fit the current font")
+    height = max(480, 206 + len(lines) * 34 + 150)
+    # A malformed or enormous catalog should not exhaust the bot's memory.
+    if WIDTH * height > MAX_IMAGE_PIXELS:
+        raise ValueError("Card exceeds the image pixel budget")
     image = Image.new("RGB", (WIDTH, height), "#F3F5F9")
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((24, 24, WIDTH - 24, height - 24), radius=28, fill="#FFFFFF")
@@ -173,12 +152,6 @@ def render_page(text: str, page_number: int, page_count: int) -> bytes:
     draw.text(
         (64, height - 82),
         "https://github.com/Futureppo/astrbot_plugin_model_watcher",
-        font=footer_font,
-        fill="#768299",
-    )
-    draw.text(
-        (WIDTH - 220, height - 82),
-        f"{page_number} / {page_count}",
         font=footer_font,
         fill="#768299",
     )

@@ -1,4 +1,4 @@
-"""Card content, pagination, and font fallback tests."""
+"""Complete single-image cards, wrapping, and font fallback tests."""
 
 from io import BytesIO
 
@@ -34,8 +34,7 @@ def notice():
 
 
 def test_card_contains_complete_change_details(notice):
-    pages = renderer.paginate_notification(notice)
-    text = "\n".join(pages)
+    text = renderer.format_notification(notice)
     for expected in [
         "条目名称：模型供应商",
         "网址：https://example.test/api/",
@@ -48,25 +47,20 @@ def test_card_contains_complete_change_details(notice):
         "0.00002",
     ]:
         assert expected in text
-    assert all(len(page) <= 1800 for page in pages)
+    assert text.count("条目名称：") == 1
 
 
 def test_many_changes_and_long_names_are_not_truncated(notice):
     notice["changes"]["added"] = [f"model-{i:04d}" for i in range(220)]
     long_value = "独特属性内容" * 800
     notice["changes"]["changed"]["updated-model"][0]["new"] = long_value
-    pages = renderer.paginate_notification(notice)
-    joined = "".join("".join(page.split("\n")[6:]) for page in pages)
-    assert len(pages) > 5
+    text = renderer.format_notification(notice)
+    joined = "".join(text.split("\n"))
     assert all(f"model-{i:04d}" in joined for i in range(220))
     assert long_value in joined
-    assert all(
-        "条目名称：模型供应商" in page
-        and "网址：https://example.test/api/" in page
-        and "+0800" in page
-        for page in pages
-    )
-    assert all(len(page.split("\n")) <= renderer.LINES_PER_PAGE for page in pages)
+    assert text.count("条目名称：模型供应商") == 1
+    assert text.count("网址：https://example.test/api/") == 1
+    assert len(text.split("\n")) > 220
 
 
 def test_png_dimensions_and_readability(notice):
@@ -74,11 +68,13 @@ def test_png_dimensions_and_readability(notice):
         renderer.load_font(24)
     except OSError:
         pytest.skip("No CJK font installed on this host")
-    pages = renderer.paginate_notification(notice)
-    png = renderer.render_page(pages[0], 1, len(pages))
+    notice["changes"]["added"] = [f"model-{i:04d}" for i in range(80)]
+    text = renderer.format_notification(notice)
+    png = renderer.render_card(text)
     image = Image.open(BytesIO(png))
     assert image.format == "PNG" and image.width == renderer.WIDTH
-    assert 480 <= image.height <= renderer.HEIGHT
+    assert image.height > 1700
+    assert image.height == 206 + len(text.split("\n")) * 34 + 150
     assert len(image.getcolors(image.width * image.height)) > 50
 
 
@@ -87,7 +83,19 @@ def test_missing_font_preserves_text(notice, monkeypatch):
         raise OSError("No Chinese font")
 
     monkeypatch.setattr(renderer, "load_font", missing)
-    pages = renderer.paginate_notification(notice)
-    assert "模型供应商" in pages[0]
+    text = renderer.format_notification(notice)
+    assert "模型供应商" in text
     with pytest.raises(OSError):
-        renderer.render_page(pages[0], 1, len(pages))
+        renderer.render_card(text)
+
+
+def test_oversized_image_fails_before_allocation(monkeypatch):
+    try:
+        renderer.load_font(24)
+    except OSError:
+        pytest.skip("No CJK font installed on this host")
+    monkeypatch.setattr(
+        renderer.Image, "new", lambda *args: pytest.fail("Image allocated")
+    )
+    with pytest.raises(ValueError, match="pixel budget"):
+        renderer.render_card("model\n" * 1500)

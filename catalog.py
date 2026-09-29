@@ -78,6 +78,7 @@ class WatchSpec:
     proxy: str | None
     targets: tuple[str, ...]
     ignored_paths: tuple[str, ...]
+    comparison_mode: str
     fingerprint: str
 
     @classmethod
@@ -130,6 +131,15 @@ class WatchSpec:
                     raise ValueError("An absolute proxy URL is required")
         except httpx.InvalidURL as exc:
             raise ValueError("Invalid API or proxy URL") from exc
+        is_openrouter = (
+            entry.get("__template_key") == "openrouter"
+            or parsed.host == "openrouter.ai"
+        )
+        comparison_mode = entry.get("comparison_mode") or (
+            "仅模型 ID" if is_openrouter else "模型 ID 和属性"
+        )
+        if comparison_mode not in {"仅模型 ID", "模型 ID 和属性"}:
+            raise ValueError("Invalid comparison mode")
         raw_interval = entry.get("interval_seconds", 30)
         try:
             interval = int(raw_interval)
@@ -197,6 +207,7 @@ class WatchSpec:
             proxy=proxy,
             targets=tuple(targets),
             ignored_paths=ignored,
+            comparison_mode=comparison_mode,
             fingerprint=fingerprint,
         )
 
@@ -303,7 +314,10 @@ async def fetch_catalog(client: httpx.AsyncClient, spec: WatchSpec) -> dict[str,
 
 
 def compare_catalogs(
-    previous: dict[str, Any], current: dict[str, Any], ignored_paths: tuple[str, ...]
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    ignored_paths: tuple[str, ...],
+    compare_attributes: bool = True,
 ) -> dict[str, Any]:
     """Compare catalog membership and nested attributes without mutating snapshots.
 
@@ -311,6 +325,7 @@ def compare_catalogs(
         previous: Last successfully fetched raw catalog.
         current: Newly fetched raw catalog.
         ignored_paths: Model-relative paths to omit from both sides.
+        compare_attributes: Whether to compare properties of existing model IDs.
 
     Returns:
         Added and removed IDs plus changed fields with explicit value presence.
@@ -320,6 +335,8 @@ def compare_catalogs(
         "removed": sorted(previous.keys() - current.keys()),
         "changed": {},
     }
+    if not compare_attributes or "$" in ignored_paths:
+        return result
     for model_id in sorted(previous.keys() & current.keys()):
         before, after = (
             copy.deepcopy(previous[model_id]),
@@ -341,8 +358,6 @@ def compare_catalogs(
                         parent[int(parts[-1])] = None
                 except (ValueError, IndexError):
                     continue
-        if "$" in ignored_paths:
-            continue
         changes = []
         stack = [("", before, after)]
         while stack:

@@ -296,4 +296,52 @@ def test_all_provider_templates_and_defaults():
             "vertex": "publisherModels",
         }.get(key, "data")
         assert spec.interval == 30 and spec.targets == ()
+        assert spec.comparison_mode == (
+            "仅模型 ID" if key == "openrouter" else "模型 ID 和属性"
+        )
         assert template["items"]["umo_whitelist"]["_special"] == "select_umos"
+
+
+@pytest.mark.parametrize(
+    "entry,expected",
+    [
+        ({"base_url": "https://openrouter.ai/api"}, "仅模型 ID"),
+        (
+            {
+                "base_url": "https://relay.test",
+                "__template_key": "openrouter",
+                "name": "Renamed",
+            },
+            "仅模型 ID",
+        ),
+        ({"base_url": "https://other.test"}, "模型 ID 和属性"),
+        (
+            {
+                "base_url": "https://openrouter.ai/api",
+                "comparison_mode": "模型 ID 和属性",
+            },
+            "模型 ID 和属性",
+        ),
+        (
+            {"base_url": "https://other.test", "comparison_mode": "仅模型 ID"},
+            "仅模型 ID",
+        ),
+    ],
+)
+def test_comparison_mode_defaults_and_overrides(entry, expected):
+    assert (
+        WatchSpec.from_entry({"entry_id": "one", **entry}).comparison_mode == expected
+    )
+
+
+def test_ids_only_preserves_membership_changes_without_copying_attributes():
+    class Uncopyable:
+        def __deepcopy__(self, memo):
+            pytest.fail("ID-only comparison copied model attributes")
+
+    assert compare_catalogs(
+        {"old": {}, "same": Uncopyable()},
+        {"new": {}, "same": Uncopyable()},
+        (),
+        compare_attributes=False,
+    ) == {"added": ["new"], "removed": ["old"], "changed": {}}

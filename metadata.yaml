@@ -1,7 +1,7 @@
 name: astrbot_plugin_model_watcher
 display_name: 模型列表监控
 description: 监控官方或自定义 API 的模型新增、下架及属性变化，向各条目的 UMO 白名单推送图片卡片。
-version: 0.0.6
+version: 0.0.7
 author: Futureppo
 repo: https://github.com/Futureppo/astrbot_plugin_model_watcher
 astrbot_version: ">=4.26.7,<5"
