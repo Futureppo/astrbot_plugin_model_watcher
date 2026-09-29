@@ -3,7 +3,7 @@
 import asyncio
 import copy
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -57,7 +57,20 @@ async def watcher_factory(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_baseline_changes_and_restart(watcher_factory, monkeypatch):
-    plugin = await watcher_factory()
+    plugin = await watcher_factory(
+        entries=[
+            {
+                "entry_id": "one",
+                "__template_key": "openrouter",
+                "name": "我的模型目录",
+                "base_url": "https://example.test/api/",
+                "full_url": "https://example.test/custom/catalog",
+                "umo_whitelist": ["bot:GroupMessage:1", "bot:FriendMessage:2"],
+            }
+        ]
+    )
+    render = Mock(return_value=b"image")
+    monkeypatch.setattr(main, "render_page", render)
     spec = plugin._specs[0]
     plugin._clients[spec.entry_id] = AsyncMock()
     fetch = AsyncMock(
@@ -68,8 +81,11 @@ async def test_baseline_changes_and_restart(watcher_factory, monkeypatch):
     plugin.context.send_message.assert_not_called()
     await plugin._run_cycle(spec)
     assert plugin.context.send_message.await_count == 2
+    text = render.call_args.args[0]
+    assert "条目名称：我的模型目录\n网址：https://example.test/api/\n" in text
+    assert "custom/catalog" not in text
     stored = copy.deepcopy(plugin._state)
-    reloaded = await watcher_factory(stored=stored)
+    reloaded = await watcher_factory(entries=plugin.config["providers"], stored=stored)
     reloaded._clients[spec.entry_id] = AsyncMock()
     monkeypatch.setattr(
         main,

@@ -67,6 +67,7 @@ class WatchSpec:
 
     entry_id: str
     name: str
+    base_url: str
     url: str
     api_key: str
     models_path: str
@@ -158,6 +159,7 @@ class WatchSpec:
         return cls(
             entry_id=str(entry["entry_id"]),
             name=str(entry.get("name") or entry.get("__template_key") or "Provider"),
+            base_url=str(entry.get("base_url") or "").strip(),
             url=str(parsed),
             api_key=api_key,
             models_path=models_path,

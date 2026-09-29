@@ -55,19 +55,21 @@ def paginate_notification(notification: dict[str, Any]) -> list[str]:
     """Prepare stable text pages for image delivery and restart-safe cursors.
 
     Args:
-        notification: Provider name, detection time, count, and catalog changes.
+        notification: Entry name, base API URL, detection time, count, and changes.
 
     Returns:
         Complete text pages, including every change and all old/new values.
     """
     changes = notification["changes"]
     lines = [
-        f"提供商：{notification['name']}",
+        f"条目名称：{notification['name']}",
+        f"网址：{notification.get('base_url') or '（未填写基础 API）'}",
         f"检测时间：{notification['time']}",
         f"当前模型：{notification['count']} 个",
         f"新增 {len(changes['added'])} · 下架 {len(changes['removed'])} · 属性变化 {len(changes['changed'])}",
         "",
     ]
+    header_line_count = len(lines)
     for key, label in (("added", "新增模型"), ("removed", "下架模型")):
         if changes[key]:
             lines.append(f"【{label}】")
@@ -108,12 +110,12 @@ def paginate_notification(notification: dict[str, Any]) -> list[str]:
                 else:
                     current = candidate
             wrapped.append(current)
-        if line_index == 4:
+        if line_index == header_line_count - 1:
             header = list(wrapped)
     # Keep subsequent cards identifiable when a notification spans many pages.
     # Unusually long provider names remain complete on the first pages.
     if len(header) > 12 or sum(len(line) + 1 for line in header) > 900:
-        header = ["（续页，提供商与检测时间见首页）", ""]
+        header = ["（续页，条目名称、网址与检测时间见首页）", ""]
     # Text fallbacks stay under 1,800 characters even on stricter adapters.
     pages, page = [], []
     length = 0

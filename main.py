@@ -122,7 +122,7 @@ class ModelWatcher(star.Star):
                     trust_env=False,
                     timeout=httpx.Timeout(15),
                     follow_redirects=False,
-                    headers={"User-Agent": "AstrBot-Model-Watcher/0.0.3"},
+                    headers={"User-Agent": "AstrBot-Model-Watcher/0.0.4"},
                 )
             except Exception as exc:
                 logger.warning(
@@ -199,6 +199,7 @@ class ModelWatcher(star.Star):
                             detected_at = datetime.now().astimezone()
                         notice = {
                             "name": spec.name,
+                            "base_url": spec.base_url,
                             "time": detected_at.strftime("%Y-%m-%d %H:%M:%S %z"),
                             "count": len(current),
                             "changes": changes,

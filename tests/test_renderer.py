@@ -12,6 +12,7 @@ from data.plugins.astrbot_plugin_model_watcher import renderer
 def notice():
     return {
         "name": "模型供应商",
+        "base_url": "https://example.test/api/",
         "time": "2026-09-29 12:00:00 +0800",
         "count": 9,
         "changes": {
@@ -36,7 +37,8 @@ def test_card_contains_complete_change_details(notice):
     pages = renderer.paginate_notification(notice)
     text = "\n".join(pages)
     for expected in [
-        "模型供应商",
+        "条目名称：模型供应商",
+        "网址：https://example.test/api/",
         "+0800",
         "new-model",
         "old-model",
@@ -54,11 +56,16 @@ def test_many_changes_and_long_names_are_not_truncated(notice):
     long_value = "独特属性内容" * 800
     notice["changes"]["changed"]["updated-model"][0]["new"] = long_value
     pages = renderer.paginate_notification(notice)
-    joined = "".join("".join(page.split("\n")[5:]) for page in pages)
+    joined = "".join("".join(page.split("\n")[6:]) for page in pages)
     assert len(pages) > 5
     assert all(f"model-{i:04d}" in joined for i in range(220))
     assert long_value in joined
-    assert all("模型供应商" in page and "+0800" in page for page in pages)
+    assert all(
+        "条目名称：模型供应商" in page
+        and "网址：https://example.test/api/" in page
+        and "+0800" in page
+        for page in pages
+    )
     assert all(len(page.split("\n")) <= renderer.LINES_PER_PAGE for page in pages)
 
 
