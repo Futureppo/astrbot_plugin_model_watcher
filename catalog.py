@@ -302,8 +302,10 @@ async def fetch_catalog(client: httpx.AsyncClient, spec: WatchSpec) -> dict[str,
             url = initial_url.copy_set_param("pageToken", next_token)
             continue
         links = payload.get("links") if isinstance(payload, dict) else None
+        if links is not None and not isinstance(links, dict):
+            raise ValueError("Invalid pagination links object")
         next_url = links.get("next") if isinstance(links, dict) else None
-        if not next_url:
+        if next_url is None or next_url == "":
             return models
         if not isinstance(next_url, str):
             raise ValueError("Invalid pagination link")

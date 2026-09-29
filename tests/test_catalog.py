@@ -157,6 +157,24 @@ async def test_bad_catalog_is_rejected(spec_factory, payload):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "links", [[], "next", {"next": False}, {"next": 0}, {"next": []}, {"next": {}}]
+)
+async def test_malformed_pagination_does_not_accept_a_partial_catalog(
+    spec_factory, links
+):
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, json={"data": [{"id": "first"}], "links": links}
+            )
+        )
+    ) as client:
+        with pytest.raises(ValueError, match="pagination"):
+            await fetch_catalog(client, spec_factory())
+
+
+@pytest.mark.asyncio
 async def test_failed_later_page_rejects_entire_catalog(spec_factory):
     def respond(request):
         if request.url.params.get("page"):
