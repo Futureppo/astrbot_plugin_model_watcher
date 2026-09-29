@@ -169,7 +169,10 @@ def render_page(text: str, page_number: int, page_count: int) -> bytes:
         y += 34
     draw.line((64, height - 104, WIDTH - 64, height - 104), fill="#E5E9F0", width=2)
     draw.text(
-        (64, height - 82), "Model Watcher · Futureppo", font=footer_font, fill="#768299"
+        (64, height - 82),
+        "https://github.com/Futureppo/astrbot_plugin_model_watcher",
+        font=footer_font,
+        fill="#768299",
     )
     draw.text(
         (WIDTH - 220, height - 82),

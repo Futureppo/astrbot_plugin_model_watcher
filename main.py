@@ -122,7 +122,7 @@ class ModelWatcher(star.Star):
                     trust_env=False,
                     timeout=httpx.Timeout(15),
                     follow_redirects=False,
-                    headers={"User-Agent": "AstrBot-Model-Watcher/0.0.2"},
+                    headers={"User-Agent": "AstrBot-Model-Watcher/0.0.3"},
                 )
             except Exception as exc:
                 logger.warning(
