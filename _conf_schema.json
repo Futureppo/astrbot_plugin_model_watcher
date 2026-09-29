@@ -1,0 +1,514 @@
+{
+  "providers": {
+    "description": "提供商配置表",
+    "type": "template_list",
+    "default": [],
+    "hint": "点击“添加条目”选择模板。同一提供商可添加多次，各自设置轮询和推送目标；首次成功只保存基线。",
+    "templates": {
+      "openrouter": {
+        "name": "OpenRouter",
+        "hint": "监控 OpenRouter 模型目录，可修改地址或添加多个账号。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "OpenRouter"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://openrouter.ai/api",
+            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          }
+        }
+      },
+      "openai": {
+        "name": "OpenAI",
+        "hint": "监控 OpenAI 模型目录，可修改地址或添加多个账号。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "OpenAI"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://api.openai.com",
+            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          }
+        }
+      },
+      "xai": {
+        "name": "xAI",
+        "hint": "监控 xAI 模型目录，可修改地址或添加多个账号。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "xAI"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://api.x.ai",
+            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          }
+        }
+      },
+      "kimi": {
+        "name": "Kimi / Moonshot",
+        "hint": "监控 Kimi / Moonshot 模型目录，可修改地址或添加多个账号。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "Kimi / Moonshot"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://api.moonshot.cn",
+            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          }
+        }
+      },
+      "deepseek": {
+        "name": "DeepSeek",
+        "hint": "监控 DeepSeek 模型目录，可修改地址或添加多个账号。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "DeepSeek"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://api.deepseek.com",
+            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          }
+        }
+      },
+      "custom": {
+        "name": "自定义",
+        "hint": "监控返回 JSON 模型列表的自定义 GET 接口。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "自定义"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "",
+            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          }
+        }
+      }
+    }
+  }
+}
