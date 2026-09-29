@@ -3,9 +3,11 @@
 监控官方或自定义 API 的模型目录，检测新增、下架和属性变化，并向各条目配置的 UMO 白名单推送图片卡片。
 
 - 作者：Futureppo
-- 版本：0.0.4
+- 版本：0.0.5
 - AstrBot：4.26.7 或更高的 4.x 版本
 - 支持 Windows、macOS、Linux，推送能力由对应平台适配器提供。
+
+更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 安装与启用
 
