@@ -255,14 +255,29 @@ def test_all_provider_templates_and_defaults():
     )
     assert schema["providers"]["default"] == []
     templates = schema["providers"]["templates"]
-    assert set(templates) == {
-        "openrouter",
-        "openai",
-        "xai",
-        "kimi",
-        "deepseek",
-        "custom",
+    expected_endpoints = {
+        "openrouter": "https://openrouter.ai/api/v1/models",
+        "openai": "https://api.openai.com/v1/models",
+        "xai": "https://api.x.ai/v1/models",
+        "kimi": "https://api.moonshot.cn/v1/models",
+        "deepseek": "https://api.deepseek.com/v1/models",
+        "kimi_intl": "https://api.moonshot.ai/v1/models",
+        "groq": "https://api.groq.com/openai/v1/models",
+        "mistral": "https://api.mistral.ai/v1/models",
+        "together": "https://api.together.ai/v1/models",
+        "cerebras": "https://api.cerebras.ai/v1/models",
+        "sambanova": "https://api.sambanova.ai/v1/models",
+        "nvidia": "https://integrate.api.nvidia.com/v1/models",
+        "siliconflow": "https://api.siliconflow.cn/v1/models",
+        "siliconflow_intl": "https://api.siliconflow.com/v1/models",
+        "stepfun": "https://api.stepfun.com/v1/models",
+        "novita": "https://api.novita.ai/v3/openai/models",
+        "deepinfra": "https://api.deepinfra.com/v1/openai/models",
+        "huggingface": "https://router.huggingface.co/v1/models",
+        "chutes": "https://llm.chutes.ai/v1/models",
+        "custom": "https://example.test/catalog",
     }
+    assert set(templates) == set(expected_endpoints)
     for key, template in templates.items():
         entry = {
             field: copy.deepcopy(meta["default"])
@@ -272,5 +287,7 @@ def test_all_provider_templates_and_defaults():
         if key == "custom":
             entry["full_url"] = "https://example.test/catalog"
         spec = WatchSpec.from_entry(entry)
+        assert spec.url == expected_endpoints[key]
+        assert spec.models_path == ("$" if key == "together" else "data")
         assert spec.interval == 30 and spec.targets == ()
         assert template["items"]["umo_whitelist"]["_special"] == "select_umos"

@@ -3,7 +3,7 @@
 监控官方或自定义 API 的模型目录，检测新增、下架和属性变化，并向各条目配置的 UMO 白名单推送图片卡片。
 
 - 作者：Futureppo
-- 版本：0.0.1
+- 版本：0.0.2
 - AstrBot：4.26.7 或更高的 4.x 版本
 - 支持 Windows、macOS、Linux，推送能力由对应平台适配器提供。
 
@@ -23,6 +23,8 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 
 ## 提供商模板
 
+内置 19 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
+
 | 模板 | 默认基础 API | 实际请求地址 |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api` | `https://openrouter.ai/api/v1/models` |
@@ -30,9 +32,25 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 | xAI | `https://api.x.ai` | `https://api.x.ai/v1/models` |
 | Kimi / Moonshot | `https://api.moonshot.cn` | `https://api.moonshot.cn/v1/models` |
 | DeepSeek | `https://api.deepseek.com` | `https://api.deepseek.com/v1/models` |
+| Kimi / Moonshot（国际站） | `https://api.moonshot.ai` | `https://api.moonshot.ai/v1/models` |
+| Groq | `https://api.groq.com/openai` | `https://api.groq.com/openai/v1/models` |
+| Mistral AI | `https://api.mistral.ai` | `https://api.mistral.ai/v1/models` |
+| Together AI | `https://api.together.ai` | `https://api.together.ai/v1/models`，列表路径已设为 `$` |
+| Cerebras | `https://api.cerebras.ai` | `https://api.cerebras.ai/v1/models` |
+| SambaNova | `https://api.sambanova.ai` | `https://api.sambanova.ai/v1/models` |
+| NVIDIA NIM | `https://integrate.api.nvidia.com` | `https://integrate.api.nvidia.com/v1/models` |
+| 硅基流动（中国站） | `https://api.siliconflow.cn` | `https://api.siliconflow.cn/v1/models` |
+| SiliconFlow（国际站） | `https://api.siliconflow.com` | `https://api.siliconflow.com/v1/models` |
+| 阶跃星辰 StepFun | `https://api.stepfun.com` | `https://api.stepfun.com/v1/models` |
+| Novita AI | `https://api.novita.ai` | 完整 API 已设为 `https://api.novita.ai/v3/openai/models` |
+| DeepInfra | `https://api.deepinfra.com` | 完整 API 已设为 `https://api.deepinfra.com/v1/openai/models` |
+| Hugging Face Inference Providers | `https://router.huggingface.co` | `https://router.huggingface.co/v1/models` |
+| Chutes | `https://llm.chutes.ai` | `https://llm.chutes.ai/v1/models` |
 | 自定义 | 留空 | 使用你填写的地址 |
 
-OpenRouter 的公开模型目录通常不需要密钥。其他模板通常需要所属提供商的 API Key，最终可见的模型以接口和账号权限为准。Kimi 国际站等其他地址可以直接修改基础 API。
+OpenRouter、SambaNova、NVIDIA、Novita、DeepInfra、Hugging Face、Chutes 的公开模型目录当前可免密钥获取，提供商后续可能调整认证要求。其他模板需要对应提供商及区域的 API Key，最终可见的模型以接口和账号权限为准。模型目录可公开查询不代表模型推理服务免费。
+
+Together AI 的返回值是根数组，模板已预填模型列表路径 `$`；Novita 和 DeepInfra 使用特殊路径，模板已预填完整 API，其优先级高于基础 API。上述模板仍可修改地址、解析路径和密钥。
 
 ## 条目设置
 
