@@ -25,7 +25,7 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 
 ## 提供商模板
 
-内置 21 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
+内置 17 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
 
 | 模板 | 默认基础 API | 实际请求地址 |
 | --- | --- | --- |
@@ -37,24 +37,18 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 | Kimi / Moonshot（国际站） | `https://api.moonshot.ai` | `https://api.moonshot.ai/v1/models` |
 | Groq | `https://api.groq.com/openai` | `https://api.groq.com/openai/v1/models` |
 | Mistral AI | `https://api.mistral.ai` | `https://api.mistral.ai/v1/models` |
-| Together AI | `https://api.together.ai` | `https://api.together.ai/v1/models`，列表路径已设为 `$` |
 | Cerebras | `https://api.cerebras.ai` | `https://api.cerebras.ai/v1/models` |
 | SambaNova | `https://api.sambanova.ai` | `https://api.sambanova.ai/v1/models` |
 | NVIDIA NIM | `https://integrate.api.nvidia.com` | `https://integrate.api.nvidia.com/v1/models` |
 | 硅基流动（中国站） | `https://api.siliconflow.cn` | `https://api.siliconflow.cn/v1/models` |
 | SiliconFlow（国际站） | `https://api.siliconflow.com` | `https://api.siliconflow.com/v1/models` |
 | 阶跃星辰 StepFun | `https://api.stepfun.com` | `https://api.stepfun.com/v1/models` |
-| Novita AI | `https://api.novita.ai` | 完整 API 已设为 `https://api.novita.ai/v3/openai/models` |
-| DeepInfra | `https://api.deepinfra.com` | 完整 API 已设为 `https://api.deepinfra.com/v1/openai/models` |
 | Hugging Face Inference Providers | `https://router.huggingface.co` | `https://router.huggingface.co/v1/models` |
-| Chutes | `https://llm.chutes.ai` | `https://llm.chutes.ai/v1/models` |
 | Google Gemini | `https://generativelanguage.googleapis.com` | `/v1beta/models`，自动读取 `models` 和 `name` |
 | Vertex AI / Model Garden | `https://us-central1-aiplatform.googleapis.com` | `/v1beta1/publishers/*/models`，读取所有厂商的目录和模型版本 |
 | 自定义 | 留空 | 使用你填写的地址 |
 
-OpenRouter、SambaNova、NVIDIA、Novita、DeepInfra、Hugging Face、Chutes 的公开模型目录当前可免密钥获取，提供商后续可能调整认证要求。其他模板需要对应提供商及区域的 API Key，最终可见的模型以接口和账号权限为准。模型目录可公开查询不代表模型推理服务免费。
-
-Together AI 的返回值是根数组，模板已预填模型列表路径 `$`；Novita 和 DeepInfra 使用特殊路径，模板已预填完整 API，其优先级高于基础 API。上述模板仍可修改地址、解析路径和密钥。
+OpenRouter、SambaNova、NVIDIA、Hugging Face 的公开模型目录当前可免密钥获取，提供商后续可能调整认证要求。其他模板需要对应提供商及区域的 API Key，最终可见的模型以接口和账号权限为准。模型目录可公开查询不代表模型推理服务免费。
 
 ### Google Gemini
 
@@ -169,7 +163,8 @@ UMO 下拉选择依赖 AstrBot WebUI 的 `_special: "select_umos"` 配置组件�
 - 每个条目每轮向同一目标最多发送一条完整通知，积压消息按后续轮次处理，避免重启时连续集中推送。
 - 除检查模式切换时清理的旧队列外，升级前的分页通知会合并尚未发送的部分，已成功发送的部分不会重发。
 - 正常运行和重启恢复时跳过已记录成功的目标。平台接受消息后、进度保存前发生进程崩溃，或平台超时但实际已发送时，仍可能重复一条。
-- 日志不打印 API Key、请求认证头或完整请求地址。配置文件中的密钥遵循 AstrBot 原有的配置存储方式。
+- 获取失败的警告包含条目名称和 ID、API 类型、请求阶段（`catalog` 或 `oauth`；异常未附请求信息时为 `fetch`）、请求域名、是否配置代理、异常类型、HTTP 状态码及脱敏错误摘要。可据此区分具体条目，以及目录请求和 Google 令牌交换失败。
+- 错误摘要提取接口的错误码、类型和说明，合并为单行并限制为 512 字符；HTML/XML 错误页仅提示响应类型，超过 64 KiB 的响应不记录正文。日志不打印完整请求地址、请求认证头或完整响应，已知密钥、查询参数值及代理凭证会脱敏。配置文件中的密钥遵循 AstrBot 原有的配置存储方式。
 
 ## 图片、字体与时间
 
@@ -191,6 +186,6 @@ ruff check data/plugins/astrbot_plugin_model_watcher
 
 插件源代码使用 Python 3.10 兼容语法；运行时仍须满足当前 AstrBot 的 Python 版本要求。
 
-测试覆盖全部 22 个配置模板的模拟认证和解析、分页、解析路径、非法响应、嵌套属性比较、去重、持久化、失败重试、目标变更、生命周期及单张长图和字体兜底。Vertex 测试使用本地生成的测试密钥和模拟 OAuth 响应，不需要真实凭证。
+测试覆盖全部 18 个配置模板的模拟认证和解析、分页、解析路径、非法响应、嵌套属性比较、去重、持久化、失败重试、目标变更、生命周期及单张长图和字体兜底。Vertex 测试使用本地生成的测试密钥和模拟 OAuth 响应，不需要真实凭证。
 
 本地测试通过不代表已完成所有提供商的真实认证和平台送达验证；实际接口可用性、账号权限和平台图片限制需要单独实测。

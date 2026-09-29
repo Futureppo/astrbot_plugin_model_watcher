@@ -5,6 +5,7 @@ import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 import pytest_asyncio
 
@@ -118,6 +119,57 @@ async def test_failed_target_retries_during_api_failure(watcher_factory, monkeyp
     assert plugin.context.send_message.call_args.args[0] == "bot:FriendMessage:2"
     assert plugin._state["entries"]["one"]["snapshot"] == {"a": "a"}
     assert plugin._state["entries"]["one"]["pending"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 403])
+async def test_http_failure_logs_entry_and_reason_without_changing_baseline(
+    watcher_factory, monkeypatch, status
+):
+    plugin = await watcher_factory(
+        entries=[
+            {
+                "entry_id": "gemini-entry",
+                "name": "Gemini官",
+                "api_type": "gemini",
+                "api_key": "private-key",
+                "base_url": "https://generativelanguage.googleapis.com",
+                "umo_whitelist": ["bot:GroupMessage:1"],
+            }
+        ]
+    )
+    spec = plugin._specs[0]
+    state = plugin._state["entries"][spec.entry_id]
+    state["snapshot"] = {"old": {"name": "old"}}
+    state["pending"] = [{"text": "Previous change", "targets": list(spec.targets)}]
+    warning = Mock()
+    monkeypatch.setattr(main.logger, "warning", warning)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                status,
+                json={
+                    "error": {
+                        "message": "Key private-key rejected",
+                        "status": "PERMISSION_DENIED",
+                    }
+                },
+            )
+        )
+    ) as client:
+        plugin._clients[spec.entry_id] = client
+        await plugin._run_cycle(spec)
+    warning.assert_called_once()
+    template, *args = warning.call_args.args
+    message = template % tuple(args)
+    assert "Gemini官" in message and "gemini-entry" in message
+    assert f"HTTP {status}" in message
+    assert "PERMISSION_DENIED" in message
+    assert "private-key" not in message
+    assert "keeping its baseline" in message
+    assert state["snapshot"] == {"old": {"name": "old"}}
+    assert state["pending"] == []
+    plugin.context.send_message.assert_awaited_once()
 
 
 @pytest.mark.asyncio

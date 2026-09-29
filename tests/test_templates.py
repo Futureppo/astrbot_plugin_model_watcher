@@ -55,7 +55,7 @@ async def test_template_authentication_and_response_parsing(template_key, servic
         else:
             assert request.headers["Authorization"] == "Bearer test-key"
             rows = [{"id": "test-model", "context_length": 4096}]
-            payload = rows if template_key == "together" else {"data": rows}
+            payload = {"data": rows}
         return httpx.Response(200, json=payload)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:

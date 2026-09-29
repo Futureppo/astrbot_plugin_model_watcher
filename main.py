@@ -16,6 +16,7 @@ from astrbot.api.event import MessageChain, filter
 from astrbot.api.message_components import Image, Plain
 
 from .catalog import WatchSpec, compare_catalogs, fetch_catalog
+from .diagnostics import describe_fetch_failure
 from .renderer import format_notification, render_card
 
 STATE_KEY = "model_watcher_state_v1"
@@ -182,17 +183,9 @@ class ModelWatcher(star.Star):
         try:
             current = await fetch_catalog(self._clients[spec.entry_id], spec)
         except Exception as exc:
-            # HTTP exceptions may embed keys, proxy passwords, or query tokens.
-            status = (
-                exc.response.status_code
-                if isinstance(exc, httpx.HTTPStatusError)
-                else "n/a"
-            )
             logger.warning(
-                "Model watcher fetch failed for entry %s (%s, HTTP %s); keeping its baseline.",
-                spec.entry_id,
-                type(exc).__name__,
-                status,
+                "Model watcher fetch failed: %s; keeping its baseline.",
+                describe_fetch_failure(spec, exc),
             )
         if current is not None:
             async with self._state_lock:

@@ -282,17 +282,13 @@ def test_all_provider_templates_and_defaults():
         "kimi_intl": "https://api.moonshot.ai/v1/models",
         "groq": "https://api.groq.com/openai/v1/models",
         "mistral": "https://api.mistral.ai/v1/models",
-        "together": "https://api.together.ai/v1/models",
         "cerebras": "https://api.cerebras.ai/v1/models",
         "sambanova": "https://api.sambanova.ai/v1/models",
         "nvidia": "https://integrate.api.nvidia.com/v1/models",
         "siliconflow": "https://api.siliconflow.cn/v1/models",
         "siliconflow_intl": "https://api.siliconflow.com/v1/models",
         "stepfun": "https://api.stepfun.com/v1/models",
-        "novita": "https://api.novita.ai/v3/openai/models",
-        "deepinfra": "https://api.deepinfra.com/v1/openai/models",
         "huggingface": "https://router.huggingface.co/v1/models",
-        "chutes": "https://llm.chutes.ai/v1/models",
         "gemini": "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
         "vertex": "https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/*/models?pageSize=100&listAllVersions=true&filter=is_hf_wildcard(false)",
         "custom": "https://example.test/catalog",
@@ -309,7 +305,6 @@ def test_all_provider_templates_and_defaults():
         spec = WatchSpec.from_entry(entry)
         assert spec.url == expected_endpoints[key]
         assert spec.models_path == {
-            "together": "$",
             "gemini": "models",
             "vertex": "publisherModels",
         }.get(key, "data")
