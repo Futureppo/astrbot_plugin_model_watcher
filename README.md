@@ -3,7 +3,7 @@
 监控官方或自定义 API 的模型目录，检测新增、下架和属性变化，并向各条目配置的 UMO 白名单推送图片卡片。
 
 - 作者：Futureppo
-- 版本：0.0.5
+- 版本：0.0.6
 - AstrBot：4.26.7 或更高的 4.x 版本
 - 支持 Windows、macOS、Linux，推送能力由对应平台适配器提供。
 
@@ -25,7 +25,7 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 
 ## 提供商模板
 
-内置 19 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
+内置 21 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
 
 | 模板 | 默认基础 API | 实际请求地址 |
 | --- | --- | --- |
@@ -48,11 +48,36 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 | DeepInfra | `https://api.deepinfra.com` | 完整 API 已设为 `https://api.deepinfra.com/v1/openai/models` |
 | Hugging Face Inference Providers | `https://router.huggingface.co` | `https://router.huggingface.co/v1/models` |
 | Chutes | `https://llm.chutes.ai` | `https://llm.chutes.ai/v1/models` |
+| Google Gemini | `https://generativelanguage.googleapis.com` | `/v1beta/models`，自动读取 `models` 和 `name` |
+| Vertex AI / Model Garden | `https://us-central1-aiplatform.googleapis.com` | `/v1beta1/publishers/*/models`，读取所有厂商的目录和模型版本 |
 | 自定义 | 留空 | 使用你填写的地址 |
 
 OpenRouter、SambaNova、NVIDIA、Novita、DeepInfra、Hugging Face、Chutes 的公开模型目录当前可免密钥获取，提供商后续可能调整认证要求。其他模板需要对应提供商及区域的 API Key，最终可见的模型以接口和账号权限为准。模型目录可公开查询不代表模型推理服务免费。
 
 Together AI 的返回值是根数组，模板已预填模型列表路径 `$`；Novita 和 DeepInfra 使用特殊路径，模板已预填完整 API，其优先级高于基础 API。上述模板仍可修改地址、解析路径和密钥。
+
+### Google Gemini
+
+添加 **Google Gemini** 条目，将 Google AI Studio 生成的普通 API Key 填入 **API Key**。插件使用 `x-goog-api-key` 请求 Gemini API 模型目录，并自动跟随 `nextPageToken` 获取后续页面。
+
+模板已填写完整 API `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000`，模型列表路径为 `models`，模型 ID 路径为 `name`。完整 API 留空时，基础 API 自动补充 `/v1beta/models`；已有 `/v1` 或 `/v1beta` 时只补充 `/models`。
+
+### Vertex AI / Model Garden
+
+1. 添加 **Vertex AI / Model Garden** 条目。
+2. 在本地用文本编辑器打开 Google Cloud 服务账号密钥 JSON 文件。
+3. 将从 `{` 到 `}` 的完整 JSON 内容粘贴到 **API Key（服务账号 JSON）** 多行输入框。无需上传文件，也不要只复制 `private_key` 的内容。
+4. 配置推送目标并保存。首次成功读取仍然只建立基线。
+
+凭证应包含 `type: "service_account"`、`project_id`、`client_email` 和 `private_key` 等字段。插件从 JSON 读取项目 ID，在本地签名，通过 Google OAuth 换取访问令牌；令牌缓存于内存并在到期前刷新，遇到 401 时刷新后重试一次。认证和目录请求使用该条目的同一 HTTP 客户端及代理。
+
+项目需启用 Vertex AI API，服务账号需具备读取模型目录的权限。插件通过 `X-Goog-User-Project` 指定凭证中的项目，服务账号还需该项目的 `serviceusage.services.use` 权限（例如 Service Usage Consumer 角色）。遇到 403 时请检查 API 是否启用及服务账号权限。
+
+默认使用 `us-central1` 接口和 `publishers/*`，目录范围与 `gcloud ai model-garden models list` 一致，包含各厂商的 Model Garden 模型。模板预设 `listAllVersions=true` 及 `filter=is_hf_wildcard(false)`；Hugging Face 全站可部署模型搜索属于另一目录模式。每个版本以 `name@versionId` 识别，避免同名的不同版本互相覆盖。此列表表示目录收录情况，实际调用或部署仍取决于项目权限和模型要求。
+
+服务账号 JSON 由 AstrBot 配置保存；私钥、JSON 原文和访问令牌不会写入卡片、模型快照或插件日志。替换凭证后重新建立基线。
+
+官方说明：[Gemini 模型列表](https://ai.google.dev/api/models#method:-models.list)、[Model Garden 模型列表](https://docs.cloud.google.com/sdk/gcloud/reference/ai/model-garden/models/list)。
 
 ## 条目设置
 
@@ -61,15 +86,15 @@ Together AI 的返回值是根数组，模板已预填模型列表路径 `$`；N
 | 条目名称、启用 | 自定义显示名称，独立启停 |
 | 基础 API | 自动补充 `/v1/models`，已有 `/v1` 时只补充 `/models` |
 | 完整 API | 优先级高于基础 API，按原地址发送 GET |
-| 模型列表路径 | 留空为 `data`；根数组填写 `$` |
-| 模型 ID 路径 | 留空为 `id`；字符串数组直接使用字符串 |
-| API Key | 留空不认证，填写后发送 Bearer 认证头 |
+| 模型列表路径 | 普通模板留空为 `data`；Gemini 为 `models`，Vertex 为 `publisherModels`；根数组填写 `$` |
+| 模型 ID 路径 | 普通模板留空为 `id`；Google 模板为 `name`；字符串数组直接使用字符串 |
+| API Key | 普通模板使用 Bearer；Gemini 填普通密钥；Vertex 粘贴完整服务账号 JSON |
 | 更新间隔 | 默认 30 秒，每轮完成后等待此间隔；非法值按 30 秒处理 |
 | 代理地址 | 留空直连，不使用系统代理；支持 HTTP、HTTPS、SOCKS5、SOCKS5H |
 | 推送 UMO 白名单 | 每个条目独立，多选群聊或私聊；留空仅监控和保存快照 |
 | 忽略属性路径 | 排除不关心的属性；留空比较全部属性 |
 
-每个条目独立使用 HTTP 客户端和轮询任务，单次 HTTP 请求最多等待 15 秒。完整 API 只支持 GET 和可选 Bearer 认证，不提供其他认证头或 POST 请求体配置。
+每个条目独立使用 HTTP 客户端和轮询任务，单次目录请求（包含必要的令牌刷新）最多等待 15 秒。目录接口使用 GET，认证方式由模板确定；自定义模板使用可选 Bearer 认证。Vertex 换取令牌使用 OAuth POST，不调用模型推理接口。
 
 ### 非标准 JSON 示例
 
@@ -93,7 +118,7 @@ Together AI 的返回值是根数组，模板已预填模型列表路径 `$`；N
 
 路径按点号访问对象，数字访问数组下标，例如 `batches.0.models`。不支持过滤表达式、通配符或键名中包含点号的转义。模型 ID 必须是非空字符串且不能重复。
 
-`links.next` 分页链接会被继续获取，必须与起始 API 同源；最多读取 100 页，重复链接或任一页失败都会放弃本轮结果。其他分页协议需要提供返回完整目录的接口。HTTP 重定向不会自动跟随，请填写最终 API 地址。
+普通模板跟随同源的 `links.next` 分页链接，Google 模板使用 `nextPageToken` 并保留原请求参数。最多读取 100 页，重复链接或令牌、任一页失败都会放弃本轮结果。其他分页协议需要提供返回完整目录的接口。HTTP 重定向不会自动跟随，请填写最终 API 地址。
 
 ### 属性变化
 

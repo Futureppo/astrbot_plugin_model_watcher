@@ -1601,6 +1601,186 @@
           }
         }
       },
+      "gemini": {
+        "name": "Google Gemini",
+        "hint": "监控 Gemini API 官方模型目录，在 API Key 中填写 Google AI Studio 密钥。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "Google Gemini"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://generativelanguage.googleapis.com",
+            "hint": "留空完整 API 时，自动补充 /v1beta/models；已有 /v1 或 /v1beta 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "models",
+            "hint": "默认使用 models；支持点号路径。Google 分页令牌会自动跟随。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "name",
+            "hint": "默认使用 name，例如 models/gemini-xxx。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "",
+            "hint": "填写 Google AI Studio API Key，使用 x-goog-api-key 认证。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          },
+          "api_type": {
+            "description": "内部 API 类型",
+            "type": "string",
+            "default": "gemini",
+            "invisible": true
+          }
+        }
+      },
+      "vertex": {
+        "name": "Vertex AI / Model Garden",
+        "hint": "监控所有厂商的 Model Garden 目录及模型版本；打开服务账号 JSON 文件，将完整内容粘贴到 API Key，插件自动获取和刷新访问令牌。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "Vertex AI / Model Garden"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://us-central1-aiplatform.googleapis.com",
+            "hint": "默认使用 us-central1 Model Garden 接口。留空完整 API 时，自动补充 /v1beta1/publishers/*/models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/*/models?pageSize=100&listAllVersions=true&filter=is_hf_wildcard(false)",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "publisherModels",
+            "hint": "默认使用 publisherModels；支持点号路径。Google 分页令牌会自动跟随。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "name",
+            "hint": "默认使用 name；返回 versionId 时，模型 ID 会显示为 name@versionId，以区分不同版本。"
+          },
+          "api_key": {
+            "description": "API Key（服务账号 JSON）",
+            "type": "text",
+            "default": "",
+            "hint": "打开 Google Cloud 服务账号密钥 JSON，将包含 type、project_id、client_email、private_key 等字段的完整 JSON 粘贴到这里；不要只复制 private_key。自动识别凭证并刷新令牌。"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "默认比较全部模型属性。每项填写模型内的路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+          },
+          "api_type": {
+            "description": "内部 API 类型",
+            "type": "string",
+            "default": "vertex",
+            "invisible": true
+          }
+        }
+      },
       "custom": {
         "name": "自定义",
         "hint": "监控返回 JSON 模型列表的自定义 GET 接口。",

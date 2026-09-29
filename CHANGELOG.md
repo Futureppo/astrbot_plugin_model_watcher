@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.0.6 - 2026-09-29
+
+- 新增 Google Gemini 提供商模板，支持普通 API Key 和 Google 模型列表分页。
+- 新增 Vertex AI / Model Garden 模板，监控所有厂商的 Model Garden 目录及模型版本。
+- Vertex 的 API Key 改为多行输入，直接粘贴服务账号 JSON，自动识别凭证、读取项目 ID、获取和刷新 OAuth 访问令牌。
+- 认证请求使用条目配置的代理；令牌被拒绝时刷新后重试一次，认证失败保留原基线。
+- Vertex 模型版本以 `name@versionId` 识别，避免不同版本被误判为重复 ID。
+
 ## 0.0.5 - 2026-09-29
 
 - 新增 `CHANGELOG.md`，支持在 AstrBot 插件管理中查看更新日志。

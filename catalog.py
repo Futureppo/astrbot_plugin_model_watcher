@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -69,7 +69,9 @@ class WatchSpec:
     name: str
     base_url: str
     url: str
-    api_key: str
+    api_key: str = field(repr=False)
+    api_type: str
+    auth: httpx.Auth | None = field(repr=False)
     models_path: str
     id_path: str
     interval: int
@@ -93,8 +95,23 @@ class WatchSpec:
         """
         full_url = str(entry.get("full_url") or "").strip()
         base_url = str(entry.get("base_url") or "").strip().rstrip("/")
+        api_type = str(entry.get("api_type") or "openai")
+        if api_type not in {"openai", "gemini", "vertex"}:
+            raise ValueError("Unsupported API type")
         if full_url:
             url = full_url
+        elif api_type == "gemini":
+            suffix = (
+                "/models" if base_url.endswith(("/v1", "/v1beta")) else "/v1beta/models"
+            )
+            url = base_url + suffix
+        elif api_type == "vertex":
+            suffix = (
+                "/publishers/*/models"
+                if base_url.endswith("/v1beta1")
+                else "/v1beta1/publishers/*/models"
+            )
+            url = base_url + suffix
         else:
             suffix = "/models" if base_url.endswith("/v1") else "/v1/models"
             url = base_url + suffix
@@ -137,8 +154,12 @@ class WatchSpec:
                 raise ValueError("Invalid UMO target") from exc
             if target not in targets:
                 targets.append(target)
-        models_path = str(entry.get("models_path") or "data").strip() or "data"
-        id_path = str(entry.get("id_path") or "id").strip() or "id"
+        default_models_path = {"gemini": "models", "vertex": "publisherModels"}.get(
+            api_type, "data"
+        )
+        default_id_path = "id" if api_type == "openai" else "name"
+        models_path = str(entry.get("models_path") or "").strip() or default_models_path
+        id_path = str(entry.get("id_path") or "").strip() or default_id_path
         ignored = tuple(
             dict.fromkeys(
                 str(path).strip()
@@ -152,16 +173,24 @@ class WatchSpec:
             ):
                 raise ValueError("JSON paths cannot contain empty segments")
         api_key = str(entry.get("api_key") or "").strip()
+        auth = None
+        if api_type == "vertex" and api_key:
+            from .google_auth import ServiceAccountAuth
+
+            auth = ServiceAccountAuth(api_key)
         # Persist a digest, never credentials or credential-bearing query strings.
-        fingerprint = hashlib.sha256(
-            json.dumps([str(parsed), api_key, models_path, id_path]).encode()
-        ).hexdigest()
+        identity = [str(parsed), api_key, models_path, id_path]
+        if api_type != "openai":
+            identity.append(api_type)
+        fingerprint = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
         return cls(
             entry_id=str(entry["entry_id"]),
             name=str(entry.get("name") or entry.get("__template_key") or "Provider"),
             base_url=str(entry.get("base_url") or "").strip(),
             url=str(parsed),
             api_key=api_key,
+            api_type=api_type,
+            auth=auth,
             models_path=models_path,
             id_path=id_path,
             interval=interval,
@@ -186,10 +215,15 @@ async def fetch_catalog(client: httpx.AsyncClient, spec: WatchSpec) -> dict[str,
         ValueError: JSON, model IDs, or pagination are invalid.
         httpx.HTTPError: A request fails.
     """
-    url = httpx.URL(spec.url)
+    url = initial_url = httpx.URL(spec.url)
     origin = (url.scheme, url.host, url.port)
     headers = {"Accept": "application/json"}
-    if spec.api_key:
+    if spec.api_type == "vertex":
+        if spec.auth is None:
+            raise ValueError("Vertex requires service account JSON in API Key")
+    elif spec.api_type == "gemini" and spec.api_key:
+        headers["x-goog-api-key"] = spec.api_key
+    elif spec.api_key:
         headers["Authorization"] = f"Bearer {spec.api_key}"
     models: dict[str, Any] = {}
     visited: set[str] = set()
@@ -210,7 +244,7 @@ async def fetch_catalog(client: httpx.AsyncClient, spec: WatchSpec) -> dict[str,
         token = _PRIVATE_REQUEST.set(True)
         try:
             response = await asyncio.wait_for(
-                client.get(url, headers=headers), timeout=15
+                client.get(url, headers=headers, auth=spec.auth), timeout=15
             )
         finally:
             _PRIVATE_REQUEST.reset(token)
@@ -232,9 +266,30 @@ async def fetch_catalog(client: httpx.AsyncClient, spec: WatchSpec) -> dict[str,
                 raise ValueError("Models must be objects or strings")
             if not isinstance(model_id, str) or not model_id.strip():
                 raise ValueError("Each model must have a nonempty string ID")
+            # Model Garden may return multiple versions with the same resource name.
+            if (
+                spec.api_type == "vertex"
+                and spec.id_path == "name"
+                and isinstance(row, dict)
+            ):
+                version = row.get("versionId")
+                if version is not None:
+                    if not isinstance(version, str) or not version.strip():
+                        raise ValueError("Invalid publisher model version")
+                    model_id = f"{model_id}@{version}"
             if model_id in models:
                 raise ValueError("Duplicate model ID")
             models[model_id] = row
+        if spec.api_type in {"gemini", "vertex"}:
+            if not isinstance(payload, dict):
+                raise ValueError("Google catalogs must return an object")
+            next_token = payload.get("nextPageToken")
+            if next_token is None or next_token == "":
+                return models
+            if not isinstance(next_token, str):
+                raise ValueError("Invalid Google pagination token")
+            url = initial_url.copy_set_param("pageToken", next_token)
+            continue
         links = payload.get("links") if isinstance(payload, dict) else None
         next_url = links.get("next") if isinstance(links, dict) else None
         if not next_url:
