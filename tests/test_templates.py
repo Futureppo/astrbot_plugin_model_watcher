@@ -28,7 +28,9 @@ async def test_template_authentication_and_response_parsing(template_key, servic
         key: metadata["default"]
         for key, metadata in TEMPLATES[template_key]["items"].items()
     }
-    entry.update(entry_id="test", __template_key=template_key, api_key="test-key")
+    entry.update(entry_id="test", __template_key=template_key)
+    if template_key != "opencode":
+        entry["api_key"] = "test-key"
     if template_key == "custom":
         entry["full_url"] = "https://custom.test/catalog"
     if template_key == "vertex":
@@ -58,7 +60,9 @@ async def test_template_authentication_and_response_parsing(template_key, servic
                 ]
             }
         else:
-            assert request.headers["Authorization"] == "Bearer test-key"
+            assert request.headers["Authorization"] == (
+                "Bearer public" if template_key == "opencode" else "Bearer test-key"
+            )
             rows = [{"id": "test-model", "context_length": 4096}]
             payload = {"data": rows}
         return httpx.Response(200, json=payload)
@@ -73,8 +77,8 @@ async def test_template_authentication_and_response_parsing(template_key, servic
     assert len(calls) == (2 if template_key == "vertex" else 1)
 
 
-def test_non_or_comparison_and_notifications_use_raw_attributes():
-    template_key = "nvidia"
+def test_generic_comparison_and_notifications_use_raw_attributes():
+    template_key = "xai"
     entry = {
         key: metadata["default"]
         for key, metadata in TEMPLATES[template_key]["items"].items()

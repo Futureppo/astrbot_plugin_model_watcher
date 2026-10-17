@@ -4,11 +4,151 @@ import copy
 
 import pytest
 
+from data.plugins.astrbot_plugin_model_watcher.card_templates import build_card_template
 from data.plugins.astrbot_plugin_model_watcher.catalog import (
     WatchSpec,
     compare_catalogs,
 )
 from data.plugins.astrbot_plugin_model_watcher.renderer import format_notification
+
+
+@pytest.mark.parametrize("provider", ["openai", "nvidia", "opencode"])
+def test_provider_selections_and_metadata_are_independent(provider):
+    entry = {
+        "entry_id": "one",
+        "__template_key": provider,
+        "base_url": "https://example.test",
+    }
+    before = {
+        "id": "m",
+        "owned_by": "system",
+        "created": 735790403,
+        "object": "model",
+        "shutdown_date": None,
+        "extra": {"flag": False},
+        "supported_parameters": ["tools", "temperature"],
+        "pricing": {"prompt": "1.0"},
+    }
+    after = {
+        **before,
+        "owned_by": "openai",
+        "created": 735790404,
+        "object": "other",
+        "shutdown_date": "2027-01-06",
+        "extra": {"flag": True},
+        "supported_parameters": ["temperature", "tools"],
+        "pricing": {"prompt": "1.00"},
+    }
+    spec = WatchSpec.from_entry(entry)
+    assert not compare_catalogs(
+        {"m": before},
+        {"m": {**before, "created": before["created"] + 30}},
+        (),
+        checks=spec.comparison_mode,
+        provider=spec.provider,
+    )["changed"]
+    changes = compare_catalogs(
+        {"m": before, "gone": {}},
+        {"m": after, "new": {}},
+        (),
+        checks=spec.comparison_mode,
+        provider=spec.provider,
+    )
+    assert changes["added"] == ["new"] and changes["removed"] == ["gone"]
+    assert {field["path"] for field in changes["changed"]["m"]} == (
+        {"owned_by", "shutdown_date"} if provider == "openai" else {"owned_by"}
+    )
+    for category, expected in [
+        ("provider", {"owned_by"}),
+        ("created", {"created"}),
+        (
+            "metadata",
+            {"object", "extra.flag", "pricing.prompt", "supported_parameters"}
+            | ({"shutdown_date"} if provider != "openai" else set()),
+        ),
+    ]:
+        spec = WatchSpec.from_entry({**entry, "detection_items": [category]})
+        result = compare_catalogs(
+            {"m": before, "gone": {}},
+            {"m": after, "new": {}},
+            (),
+            checks=spec.comparison_mode,
+            provider=spec.provider,
+        )
+        assert result["added"] == result["removed"] == []
+        assert {field["path"] for field in result["changed"]["m"]} == expected
+    assert not compare_catalogs(
+        {"m": before},
+        {"m": after},
+        ("owned_by",),
+        checks=("provider",),
+        provider=provider,
+    )["changed"]
+    with pytest.raises(ValueError, match="detection items"):
+        WatchSpec.from_entry({**entry, "detection_items": ["pricing"]})
+    if provider != "openai":
+        with pytest.raises(ValueError, match="detection items"):
+            WatchSpec.from_entry({**entry, "detection_items": ["lifecycle"]})
+    notice = {
+        "name": provider,
+        "provider": provider,
+        "time": "2026-10-18",
+        "count": 2,
+        "changes": changes,
+    }
+    text = format_notification(notice)
+    assert '提供商 · owned_by："system" → "openai"' in text
+    _, data = build_card_template(notice, "light")
+    labels = {field["path"]: field["label"] for field in data["models"][0]["fields"]}
+    assert labels["owned_by"] == "提供商"
+    if provider == "openai":
+        assert labels["shutdown_date"] == "停用日期"
+        assert "停用日期 · shutdown_date（信息补全）" in text
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ({}, {"shutdown_date": "2027-01-06"}),
+        ({"shutdown_date": None}, {"shutdown_date": "2027-01-06"}),
+        ({"shutdown_date": "2027-01-06"}, {"shutdown_date": "2027-02-01"}),
+        ({"shutdown_date": "2027-01-06"}, {"shutdown_date": None}),
+        ({"shutdown_date": "2027-01-06"}, {}),
+    ],
+)
+def test_openai_shutdown_changes_preserve_missing_null_and_dates(before, after):
+    changes = compare_catalogs(
+        {"m": before}, {"m": after}, (), checks=("lifecycle",), provider="openai"
+    )
+    assert changes["changed"]["m"] == [
+        {
+            "path": "shutdown_date",
+            "old": before.get("shutdown_date"),
+            "new": after.get("shutdown_date"),
+            "old_exists": "shutdown_date" in before,
+            "new_exists": "shutdown_date" in after,
+        }
+    ]
+    notice = {
+        "name": "OpenAI",
+        "provider": "openai",
+        "time": "2026-10-18",
+        "count": 1,
+        "changes": changes,
+    }
+    text = format_notification(notice)
+    _, data = build_card_template(notice, "diff")
+    field = data["models"][0]["fields"][0]
+    assert field["label"] == "停用日期" and "停用日期" in text
+    for side, value in (("old", before), ("new", after)):
+        expected = (
+            '"' + value["shutdown_date"] + '"'
+            if value.get("shutdown_date")
+            else "null"
+            if "shutdown_date" in value
+            else "（不存在）"
+        )
+        assert field[side] == expected and expected in text
 
 
 def test_deepseek_selected_fields_and_provider_notifications():

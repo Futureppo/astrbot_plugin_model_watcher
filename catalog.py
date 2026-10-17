@@ -95,6 +95,49 @@ DEEPSEEK_SET_PATHS = {
     "output_modalities",
     "effort.supported_levels",
 }
+PROVIDER_CHECK_LABELS = {
+    "openrouter": CHECK_LABELS,
+    "deepseek": DEEPSEEK_CHECK_LABELS,
+    "openai": {
+        "membership": "模型新增、下架",
+        "lifecycle": "停用日期",
+        "provider": "提供商",
+        "created": "创建时间",
+        "metadata": "其他元数据（高级）",
+    },
+    "nvidia": {
+        "membership": "模型新增、下架",
+        "provider": "提供商",
+        "created": "创建时间（高级）",
+        "metadata": "其他元数据（高级）",
+    },
+    "opencode": {
+        "membership": "模型新增、下架",
+        "provider": "提供商",
+        "created": "接口时间戳（高级）",
+        "metadata": "其他元数据（高级）",
+    },
+}
+PROVIDER_ATTRIBUTE_GROUPS = {
+    "openrouter": ATTRIBUTE_GROUPS,
+    "deepseek": DEEPSEEK_ATTRIBUTE_GROUPS,
+    "openai": {
+        "id": "membership",
+        "shutdown_date": "lifecycle",
+        "owned_by": "provider",
+        "created": "created",
+    },
+    "nvidia": {
+        "id": "membership",
+        "owned_by": "provider",
+        "created": "created",
+    },
+    "opencode": {
+        "id": "membership",
+        "owned_by": "provider",
+        "created": "created",
+    },
+}
 PRICE_KEYS = {
     "prompt",
     "completion",
@@ -222,6 +265,7 @@ class WatchSpec:
     targets: tuple[str, ...]
     ignored_paths: tuple[str, ...]
     comparison_mode: tuple[str, ...]
+    provider: str
     is_openrouter: bool
     is_deepseek: bool
     fingerprint: str
@@ -281,8 +325,9 @@ class WatchSpec:
                     raise ValueError("An absolute proxy URL is required")
         except httpx.InvalidURL as exc:
             raise ValueError("Invalid API or proxy URL") from exc
-        is_openrouter = entry.get("__template_key") == "openrouter"
-        is_deepseek = entry.get("__template_key") == "deepseek"
+        provider = str(entry.get("__template_key") or "")
+        is_openrouter = provider == "openrouter"
+        is_deepseek = provider == "deepseek"
         if (
             (is_openrouter or parsed.host == "openrouter.ai")
             and api_type == "openai"
@@ -291,19 +336,17 @@ class WatchSpec:
         ):
             # OpenRouter otherwise defaults to models that produce text output.
             parsed = parsed.copy_set_param("output_modalities", "all")
-        if is_openrouter or is_deepseek:
-            labels = DEEPSEEK_CHECK_LABELS if is_deepseek else CHECK_LABELS
-            selection = (
-                entry.get(
-                    "detection_items",
-                    [
-                        key
-                        for key in DEEPSEEK_CHECK_LABELS
-                        if key not in {"metadata", "system_fingerprint"}
-                    ],
-                )
-                if is_deepseek
-                else entry.get("comparison_mode", ["membership"])
+        if provider in PROVIDER_CHECK_LABELS:
+            labels = PROVIDER_CHECK_LABELS[provider]
+            selection = entry.get(
+                "comparison_mode" if is_openrouter else "detection_items",
+                ["membership"]
+                if is_openrouter
+                else [
+                    key
+                    for key in labels
+                    if key not in {"metadata", "system_fingerprint", "created"}
+                ],
             )
             if not isinstance(selection, list) or any(
                 not isinstance(item, str) or item not in labels for item in selection
@@ -427,6 +470,7 @@ class WatchSpec:
             targets=tuple(targets),
             ignored_paths=ignored,
             comparison_mode=comparison_mode,
+            provider=provider,
             is_openrouter=is_openrouter,
             is_deepseek=is_deepseek,
             fingerprint=fingerprint,
@@ -626,6 +670,7 @@ def compare_catalogs(
     checks: tuple[str, ...] | None = None,
     openrouter: bool = False,
     deepseek: bool = False,
+    provider: str = "",
 ) -> dict[str, Any]:
     """Compare catalog membership and nested attributes without mutating snapshots.
 
@@ -636,12 +681,17 @@ def compare_catalogs(
         checks: Selected categories; None compares all available categories.
         openrouter: Whether to apply OR categories, field semantics, and schedules.
         deepseek: Whether to apply DeepSeek categories and list semantics.
+        provider: Template key selecting provider-specific attribute categories.
 
     Returns:
         Added and removed IDs plus changed fields with explicit value presence.
     """
     if checks is None:
-        checks = tuple(DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS)
+        checks = tuple(
+            PROVIDER_CHECK_LABELS.get(
+                provider, DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS
+            )
+        )
     result: dict[str, Any] = {
         "added": sorted(current.keys() - previous.keys())
         if "membership" in checks
@@ -653,7 +703,10 @@ def compare_catalogs(
     }
     if not (set(checks) - {"membership"}) or "$" in ignored_paths:
         return result
-    groups = DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
+    categorized = openrouter or deepseek or provider in PROVIDER_CHECK_LABELS
+    groups = PROVIDER_ATTRIBUTE_GROUPS.get(
+        provider, DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
+    )
     for model_id in sorted(previous.keys() & current.keys()):
         before, after = (
             copy.deepcopy(value)
@@ -663,7 +716,7 @@ def compare_catalogs(
         )
         for value in (before, after):
             # Keep categories disjoint, including shared parents such as architecture.
-            nodes = [("", value)] if openrouter or deepseek else []
+            nodes = [("", value)] if categorized else []
             while nodes:
                 parent_path, node = nodes.pop()
                 if not isinstance(node, dict):

@@ -243,15 +243,32 @@
             ],
             "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
-          "comparison_mode": {
-            "description": "检查内容",
-            "type": "string",
-            "default": "模型 ID 和属性",
-            "options": [
-              "仅模型 ID",
-              "模型 ID 和属性"
+          "detection_items": {
+            "description": "检查内容（可多选）",
+            "type": "list",
+            "default": [
+              "membership",
+              "lifecycle",
+              "provider"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
+            "items": {
+              "type": "string"
+            },
+            "options": [
+              "membership",
+              "lifecycle",
+              "provider",
+              "created",
+              "metadata"
+            ],
+            "labels": [
+              "模型新增、下架",
+              "停用日期",
+              "提供商",
+              "创建时间",
+              "其他元数据（高级）"
+            ],
+            "hint": "默认检查模型新增、下架、停用日期和提供商。停用日期对应 shutdown_date，检测新增日期、调整日期、清空或删除字段；提供商保留 owned_by 原值。created 为创建时间，不代表模型升级。其他元数据包含 object 及未分类字段，不包含已单独分类的属性。全部取消则暂停变化通知，继续更新快照。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -260,7 +277,7 @@
             "items": {
               "type": "string"
             },
-            "hint": "选择“模型 ID 和属性”时生效。每项填写模型内路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+            "hint": "在已选检查内容中排除指定属性，例如 owned_by、created、shutdown_date；$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。修改检查项目或忽略路径会清理旧规则的待发通知，保留快照。"
           }
         }
       },
@@ -1230,15 +1247,29 @@
             ],
             "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
-          "comparison_mode": {
-            "description": "检查内容",
-            "type": "string",
-            "default": "模型 ID 和属性",
-            "options": [
-              "仅模型 ID",
-              "模型 ID 和属性"
+          "detection_items": {
+            "description": "检查内容（可多选）",
+            "type": "list",
+            "default": [
+              "membership",
+              "provider"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
+            "items": {
+              "type": "string"
+            },
+            "options": [
+              "membership",
+              "provider",
+              "created",
+              "metadata"
+            ],
+            "labels": [
+              "模型新增、下架",
+              "提供商",
+              "创建时间（高级）",
+              "其他元数据（高级）"
+            ],
+            "hint": "默认检查模型新增、下架和提供商（owned_by）。created 在当前响应中是所有模型共用的固定值，创建时间默认不选，变化仅表示字段变化。其他元数据包含 object 及未分类字段，不包含已单独分类的属性。全部取消则暂停变化通知，继续更新快照。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1247,7 +1278,137 @@
             "items": {
               "type": "string"
             },
-            "hint": "选择“模型 ID 和属性”时生效。每项填写模型内路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+            "hint": "在已选检查内容中排除指定属性，例如 owned_by、created；$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。修改检查项目或忽略路径会清理旧规则的待发通知，保留快照。"
+          }
+        }
+      },
+      "opencode": {
+        "name": "OpenCode",
+        "hint": "监控 OpenCode 公开模型目录，API Key 默认使用 public，可按需替换。",
+        "display_item": "name",
+        "items": {
+          "entry_id": {
+            "description": "内部条目 ID",
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "description": "条目名称",
+            "type": "string",
+            "default": "OpenCode"
+          },
+          "enabled": {
+            "description": "启用该条目",
+            "type": "bool",
+            "default": true
+          },
+          "base_url": {
+            "description": "基础 API",
+            "type": "string",
+            "default": "https://opencode.ai/inference",
+            "hint": "默认基础 API 为 https://opencode.ai/inference，自动追加 /v1/models；末尾已有 /v1 时只补充 /models。"
+          },
+          "full_url": {
+            "description": "完整 API（优先）",
+            "type": "string",
+            "default": "",
+            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+          },
+          "models_path": {
+            "description": "模型列表路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
+          },
+          "id_path": {
+            "description": "模型 ID 路径",
+            "type": "string",
+            "default": "",
+            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
+          },
+          "api_key": {
+            "description": "API Key",
+            "type": "string",
+            "default": "public",
+            "hint": "默认使用公开密钥 public，发送 Authorization: Bearer public。也可替换为自己的 API Key，留空不发送认证头。官方说明：https://opencode.ai/docs/zen/"
+          },
+          "interval_seconds": {
+            "description": "更新间隔（秒）",
+            "type": "int",
+            "default": 30,
+            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
+          },
+          "proxy": {
+            "description": "代理地址",
+            "type": "string",
+            "default": "",
+            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
+          },
+          "umo_whitelist": {
+            "description": "推送 UMO 白名单",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "_special": "select_umos",
+            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
+          "detection_items": {
+            "description": "检查内容（可多选）",
+            "type": "list",
+            "default": [
+              "membership",
+              "provider"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "options": [
+              "membership",
+              "provider",
+              "created",
+              "metadata"
+            ],
+            "labels": [
+              "模型新增、下架",
+              "提供商",
+              "接口时间戳（高级）",
+              "其他元数据（高级）"
+            ],
+            "hint": "默认检查模型新增、下架和提供商（owned_by，保留接口原值）。实测 created 会随请求整体变化，作为接口时间戳单独列为高级项，默认不选。其他元数据包含 object 及未分类字段，不包含 created 和 owned_by。全部取消则暂停变化通知，继续更新快照。"
+          },
+          "ignored_paths": {
+            "description": "忽略属性路径",
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "hint": "在已选检查内容中排除指定属性，例如 owned_by、created；$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。修改检查项目或忽略路径会清理旧规则的待发通知，保留快照。"
           }
         }
       },

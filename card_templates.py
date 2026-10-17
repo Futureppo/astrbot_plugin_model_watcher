@@ -13,6 +13,8 @@ from .catalog import (
     DEEPSEEK_ATTRIBUTE_GROUPS,
     DEEPSEEK_CHECK_LABELS,
     DEEPSEEK_SET_PATHS,
+    PROVIDER_ATTRIBUTE_GROUPS,
+    PROVIDER_CHECK_LABELS,
     SET_PATHS,
 )
 
@@ -43,10 +45,16 @@ def build_card_template(
     template = template.replace("/* CARD_STYLES */", css)
     changes = notification["changes"]
     deepseek = notification.get("deepseek", False)
-    categorized = deepseek or notification.get("openrouter", False)
-    groups = DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
-    labels = DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS
-    set_paths = DEEPSEEK_SET_PATHS if deepseek else SET_PATHS
+    openrouter = notification.get("openrouter", False)
+    provider = notification.get("provider", "")
+    categorized = deepseek or openrouter or provider in PROVIDER_CHECK_LABELS
+    groups = PROVIDER_ATTRIBUTE_GROUPS.get(
+        provider, DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
+    )
+    labels = PROVIDER_CHECK_LABELS.get(
+        provider, DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS
+    )
+    set_paths = DEEPSEEK_SET_PATHS if deepseek else SET_PATHS if openrouter else ()
     models = []
     for model_id, fields in changes["changed"].items():
         rendered_fields = []

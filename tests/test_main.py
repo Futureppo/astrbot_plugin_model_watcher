@@ -552,6 +552,9 @@ async def test_mode_switch_discards_old_notices_without_resetting_snapshot(
     [
         ("openrouter", "comparison_mode", "pricing"),
         ("deepseek", "detection_items", "provider"),
+        ("openai", "detection_items", "lifecycle"),
+        ("nvidia", "detection_items", "provider"),
+        ("opencode", "detection_items", "provider"),
     ],
 )
 async def test_empty_selection_clears_backlog_and_continues_refreshing(

@@ -11,6 +11,7 @@ import pytest
 from data.plugins.astrbot_plugin_model_watcher.catalog import (
     CHECK_LABELS,
     DEEPSEEK_CHECK_LABELS,
+    PROVIDER_CHECK_LABELS,
     WatchSpec,
     compare_catalogs,
     fetch_catalog,
@@ -353,6 +354,7 @@ def test_all_provider_templates_and_defaults():
         "mistral": "https://api.mistral.ai/v1/models",
         "cerebras": "https://api.cerebras.ai/v1/models",
         "nvidia": "https://integrate.api.nvidia.com/v1/models",
+        "opencode": "https://opencode.ai/inference/v1/models",
         "siliconflow": "https://api.siliconflow.cn/v1/models",
         "siliconflow_intl": "https://api.siliconflow.com/v1/models",
         "stepfun": "https://api.stepfun.com/v1/models",
@@ -378,8 +380,12 @@ def test_all_provider_templates_and_defaults():
             "vertex": "publisherModels",
         }.get(key, "data")
         assert spec.interval == 30 and spec.targets == ()
+        if key == "opencode":
+            assert spec.api_key == "public"
         mode = template["items"][
-            "detection_items" if key == "deepseek" else "comparison_mode"
+            "detection_items"
+            if key in {"deepseek", "openai", "nvidia", "opencode"}
+            else "comparison_mode"
         ]
         if key == "openrouter":
             assert spec.comparison_mode == ("membership",)
@@ -397,6 +403,17 @@ def test_all_provider_templates_and_defaults():
             assert mode["default"] == list(spec.comparison_mode)
             assert mode["options"] == list(DEEPSEEK_CHECK_LABELS)
             assert mode["labels"] == list(DEEPSEEK_CHECK_LABELS.values())
+            assert "comparison_mode" not in template["items"]
+        elif key in {"openai", "nvidia", "opencode"}:
+            expected = (
+                ["membership", "lifecycle", "provider"]
+                if key == "openai"
+                else ["membership", "provider"]
+            )
+            assert list(spec.comparison_mode) == mode["default"] == expected
+            assert mode["type"] == "list"
+            assert mode["options"] == list(PROVIDER_CHECK_LABELS[key])
+            assert mode["labels"] == list(PROVIDER_CHECK_LABELS[key].values())
             assert "comparison_mode" not in template["items"]
         else:
             assert spec.comparison_mode == tuple(CHECK_LABELS)

@@ -17,7 +17,13 @@ from astrbot.api.event import MessageChain, filter
 from astrbot.api.message_components import Image, Plain
 
 from .card_templates import build_card_template
-from .catalog import WatchSpec, compare_catalogs, fetch_catalog, fetch_fingerprints
+from .catalog import (
+    PROVIDER_CHECK_LABELS,
+    WatchSpec,
+    compare_catalogs,
+    fetch_catalog,
+    fetch_fingerprints,
+)
 from .diagnostics import describe_fetch_failure
 from .renderer import format_notification, render_card
 
@@ -77,7 +83,7 @@ class ModelWatcher(star.Star):
                 continue
             saved_mode = (
                 list(spec.comparison_mode)
-                if spec.is_openrouter or spec.is_deepseek
+                if spec.provider in PROVIDER_CHECK_LABELS
                 else entry.get("comparison_mode", "模型 ID 和属性")
             )
             if str(entry.get("interval_seconds", 30)) != str(spec.interval):
@@ -104,14 +110,14 @@ class ModelWatcher(star.Star):
                 state.get("comparison_mode") != saved_mode
                 or not spec.comparison_mode
                 or (
-                    (spec.is_openrouter or spec.is_deepseek)
+                    spec.provider in PROVIDER_CHECK_LABELS
                     and set(state.get("ignored_paths", spec.ignored_paths))
                     != set(spec.ignored_paths)
                 )
             ):
                 state["pending"] = []
             state["comparison_mode"] = saved_mode
-            if spec.is_openrouter or spec.is_deepseek:
+            if spec.provider in PROVIDER_CHECK_LABELS:
                 state["ignored_paths"] = list(spec.ignored_paths)
             else:
                 state.pop("ignored_paths", None)
@@ -254,6 +260,7 @@ class ModelWatcher(star.Star):
                         checks=checks,
                         openrouter=spec.is_openrouter,
                         deepseek=spec.is_deepseek,
+                        provider=spec.provider,
                     )
                     if changes["added"] or changes["removed"] or changes["changed"]:
                         zone_name = str(
@@ -268,6 +275,7 @@ class ModelWatcher(star.Star):
                         except (ValueError, ZoneInfoNotFoundError):
                             detected_at = datetime.now().astimezone()
                         notice = {
+                            "provider": spec.provider,
                             "openrouter": spec.is_openrouter,
                             "deepseek": spec.is_deepseek,
                             "fingerprints": fingerprints,

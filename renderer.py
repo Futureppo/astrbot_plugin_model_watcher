@@ -18,6 +18,8 @@ from .catalog import (
     DEEPSEEK_ATTRIBUTE_GROUPS,
     DEEPSEEK_CHECK_LABELS,
     DEEPSEEK_SET_PATHS,
+    PROVIDER_ATTRIBUTE_GROUPS,
+    PROVIDER_CHECK_LABELS,
     SET_PATHS,
 )
 
@@ -70,9 +72,16 @@ def format_notification(notification: dict[str, Any]) -> str:
     """
     changes = notification["changes"]
     deepseek = notification.get("deepseek", False)
-    groups = DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
-    labels = DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS
-    set_paths = DEEPSEEK_SET_PATHS if deepseek else SET_PATHS
+    openrouter = notification.get("openrouter", False)
+    provider = notification.get("provider", "")
+    categorized = deepseek or openrouter or provider in PROVIDER_CHECK_LABELS
+    groups = PROVIDER_ATTRIBUTE_GROUPS.get(
+        provider, DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
+    )
+    labels = PROVIDER_CHECK_LABELS.get(
+        provider, DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS
+    )
+    set_paths = DEEPSEEK_SET_PATHS if deepseek else SET_PATHS if openrouter else ()
     lines = [
         f"条目名称：{notification['name']}",
         f"网址：{notification.get('base_url') or '（未填写基础 API）'}",
@@ -102,7 +111,7 @@ def format_notification(notification: dict[str, Any]) -> str:
                     else "（不存在）"
                 )
                 path = field["path"]
-                if not (notification.get("openrouter", False) or deepseek):
+                if not categorized:
                     lines.append(f"  {path}：{old} → {new}")
                     continue
                 group = next(
@@ -121,6 +130,8 @@ def format_notification(notification: dict[str, Any]) -> str:
                         "top_provider": "主要供应商配置",
                         "alias_target": "模型别名指向",
                     }
+                    if openrouter
+                    else {}
                 )
                 title = titles.get(path, labels[group])
                 label = f"{title} · {path}"
