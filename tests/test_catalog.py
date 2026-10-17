@@ -389,7 +389,9 @@ def test_all_provider_templates_and_defaults():
         elif key == "deepseek":
             assert spec.is_deepseek and not spec.is_openrouter
             assert spec.comparison_mode == tuple(
-                key for key in DEEPSEEK_CHECK_LABELS if key != "metadata"
+                key
+                for key in DEEPSEEK_CHECK_LABELS
+                if key not in {"metadata", "system_fingerprint"}
             )
             assert mode["type"] == "list"
             assert mode["default"] == list(spec.comparison_mode)

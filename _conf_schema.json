@@ -78,6 +78,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检测项目（可多选）",
             "type": "list",
@@ -199,6 +221,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -292,6 +336,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",
@@ -387,6 +453,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -481,6 +569,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "detection_items": {
             "description": "检查内容（可多选）",
             "type": "list",
@@ -504,7 +614,8 @@
               "modalities",
               "reasoning",
               "api_capabilities",
-              "metadata"
+              "metadata",
+              "system_fingerprint"
             ],
             "labels": [
               "模型新增、下架",
@@ -514,9 +625,40 @@
               "输入、输出类型",
               "推理档位与默认配置",
               "API 能力与限制",
-              "其他元数据（高级）"
+              "其他元数据（高级）",
+              "后端指纹（system_fingerprint）"
             ],
-            "hint": "可组合检测模型新增/下架、名称、提供商、上下文与输出长度、输入输出类型、推理档位、API 能力。提供商对应 owned_by；其他元数据默认不选。全部取消则暂停变化通知，继续更新快照。"
+            "hint": "提供商对应 owned_by；其他元数据和后端指纹默认不选。检测指纹还需打开下方的探测开关，会向当前列表中的每个模型发送 hi。全部取消则暂停变化通知，继续更新模型列表快照。"
+          },
+          "fingerprint_probe": {
+            "description": "后端指纹探测设置",
+            "type": "object",
+            "default": {
+              "enabled": false,
+              "max_tokens": 16,
+              "interval_seconds": 240
+            },
+            "hint": "仅用于 DeepSeek 的 system_fingerprint 检测。使用本条目的基础 API、API Key 和代理访问 /chat/completions；完整 API 仍只用于模型列表。首次成功记录基线，之后指纹变化时推送旧值和新值。",
+            "items": {
+              "enabled": {
+                "description": "启用指纹探测",
+                "type": "bool",
+                "default": false,
+                "hint": "默认关闭。开启且勾选后端指纹检查后，对当前模型列表逐个发送 hi，关闭思考输出；请求会消耗 token。关闭或取消勾选后停止请求，重新开启时建立新基线。"
+              },
+              "max_tokens": {
+                "description": "最大输出 token 数（max_tokens）",
+                "type": "int",
+                "default": 16,
+                "hint": "每个模型单次探测的输出上限；正整数，默认 16，非法值按 16 处理。"
+              },
+              "interval_seconds": {
+                "description": "指纹检测间隔（秒）",
+                "type": "int",
+                "default": 240,
+                "hint": "独立于模型列表更新间隔；每轮探测完成后等待此间隔。正整数，默认 240，非法值按 240 处理。"
+              }
+            }
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -525,7 +667,7 @@
             "items": {
               "type": "string"
             },
-            "hint": "在已选检查内容中排除指定属性，例如 owned_by、effort.default_level、api_capabilities。$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。"
+            "hint": "在已选检查内容中排除指定属性，例如 owned_by、effort.default_level、api_capabilities。system_fingerprint 或 $ 会停止指纹探测；$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。"
           }
         }
       },
@@ -601,6 +743,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",
@@ -696,6 +860,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -789,6 +975,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",
@@ -884,6 +1092,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -977,6 +1207,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",
@@ -1072,6 +1324,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -1165,6 +1439,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",
@@ -1260,6 +1556,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -1354,6 +1672,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -1447,6 +1787,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",
@@ -1548,6 +1910,28 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
+          },
           "comparison_mode": {
             "description": "检查内容",
             "type": "string",
@@ -1647,6 +2031,28 @@
             },
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
+          },
+          "card_template": {
+            "description": "通知图片模板",
+            "type": "string",
+            "default": "classic",
+            "options": [
+              "classic",
+              "light",
+              "dark",
+              "diff",
+              "soft",
+              "bold"
+            ],
+            "labels": [
+              "原版",
+              "A · 浅色卡片",
+              "B · 深色监控台",
+              "C · 差异对照",
+              "D · 柔和彩色卡片",
+              "E · 粗边框拼色"
+            ],
+            "hint": "每个条目独立选择，A～E 为所有提供商共用的模板，使用 AstrBot 配置的 HTML 图片渲染服务。原版在本地渲染。切换模板不重置监控快照。"
           },
           "comparison_mode": {
             "description": "检查内容",

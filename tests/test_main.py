@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -54,6 +55,159 @@ async def watcher_factory(monkeypatch):
     yield build
     for plugin in plugins:
         await plugin.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {},
+        {"detection_items": ["system_fingerprint"]},
+        {"fingerprint_probe": {"enabled": True}},
+        {
+            "detection_items": ["system_fingerprint"],
+            "fingerprint_probe": {"enabled": True},
+            "ignored_paths": ["system_fingerprint"],
+        },
+    ],
+)
+async def test_fingerprint_requests_require_selection_and_switch(
+    watcher_factory, settings
+):
+    plugin = await watcher_factory(
+        entries=[
+            {
+                "entry_id": "one",
+                "__template_key": "deepseek",
+                "base_url": "https://example.test",
+                **settings,
+            }
+        ]
+    )
+    spec = plugin._specs[0]
+    assert not spec.fingerprint_enabled
+    assert spec.fingerprint_interval == 240
+    assert spec.fingerprint_max_tokens == 16
+    plugin._clients["one"] = AsyncMock()
+    plugin._state["entries"]["one"]["snapshot"] = {"a": {"id": "a"}}
+    await plugin._run_cycle(spec, fingerprints=True)
+    plugin._clients["one"].post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fingerprint_baselines_failures_and_restart(watcher_factory, monkeypatch):
+    entry = {
+        "entry_id": "one",
+        "__template_key": "deepseek",
+        "base_url": "https://example.test/v1/",
+        "api_key": "test-key",
+        "detection_items": ["system_fingerprint"],
+        "fingerprint_probe": {"enabled": True, "max_tokens": 8},
+        "umo_whitelist": ["bot:GroupMessage:1"],
+    }
+    plugin = await watcher_factory(entries=[entry])
+    spec = plugin._specs[0]
+    models = {"a": {"id": "a"}, "b": {"id": "b"}}
+    monkeypatch.setattr(main, "fetch_catalog", AsyncMock(return_value=models))
+    render = Mock(return_value=b"image")
+    monkeypatch.setattr(main, "render_card", render)
+    values = {"a": "fp-a", "b": "fp-b"}
+    status = {"a": 200, "b": 200}
+    requests = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        assert request.method == "POST"
+        assert str(request.url) == "https://example.test/v1/chat/completions"
+        assert request.headers["Authorization"] == "Bearer test-key"
+        assert body == {
+            "model": body["model"],
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 8,
+            "thinking": {"type": "disabled"},
+            "stream": False,
+        }
+        requests.append(body["model"])
+        return httpx.Response(
+            status[body["model"]],
+            json={"system_fingerprint": values[body["model"]]},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        plugin._clients["one"] = client
+        await plugin._run_cycle(spec)
+        assert requests == []
+        await plugin._run_cycle(spec, fingerprints=True)
+        assert requests == ["a", "b"]
+        plugin.context.send_message.assert_not_called()
+        values["a"] = "fp-a-new"
+        status["b"] = 429
+        plugin.context.send_message.return_value = False
+        await plugin._run_cycle(spec, fingerprints=True)
+        state = plugin._state["entries"]["one"]
+        assert state["snapshot"] == models
+        assert state["system_fingerprints"] == {
+            "a": {"system_fingerprint": "fp-a-new"},
+            "b": {"system_fingerprint": "fp-b"},
+        }
+        assert '"fp-a" → "fp-a-new"' in render.call_args.args[0]
+        assert "system_fingerprint" in render.call_args.args[0]
+        assert len(state["pending"]) == 1
+
+        reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
+        reloaded._clients["one"] = client
+        values.update(a=None, b="")
+        status["b"] = 200
+        await reloaded._run_cycle(reloaded._specs[0], fingerprints=True)
+        reloaded.context.send_message.assert_awaited_once()
+        assert (
+            reloaded._state["entries"]["one"]["system_fingerprints"]
+            == state["system_fingerprints"]
+        )
+        assert reloaded._state["entries"]["one"]["pending"] == []
+
+        disabled = await watcher_factory(
+            entries=[dict(entry, fingerprint_probe={"enabled": False})],
+            stored=plugin._state,
+        )
+        disabled_state = disabled._state["entries"]["one"]
+        assert "system_fingerprints" not in disabled_state
+        assert disabled_state["pending"] == []
+
+
+@pytest.mark.asyncio
+async def test_fingerprint_schedule_is_independent(watcher_factory, monkeypatch):
+    plugin = await watcher_factory(
+        entries=[
+            {
+                "entry_id": "one",
+                "__template_key": "deepseek",
+                "base_url": "https://example.test",
+                "interval_seconds": 1000,
+                "detection_items": ["system_fingerprint"],
+                "fingerprint_probe": {"enabled": True},
+            }
+        ]
+    )
+    clock = 0
+    runs = []
+
+    async def cycle(spec, *, fingerprints=False):
+        runs.append((clock, fingerprints))
+        if clock >= 480:
+            plugin._stopping = True
+
+    async def sleep(seconds):
+        nonlocal clock
+        clock += seconds
+
+    monkeypatch.setattr(plugin, "_run_cycle", cycle)
+    monkeypatch.setattr(
+        main.asyncio, "get_running_loop", lambda: SimpleNamespace(time=lambda: clock)
+    )
+    monkeypatch.setattr(main.asyncio, "sleep", sleep)
+    await plugin._monitor(plugin._specs[0])
+    assert runs == [(0, False), (0, True), (240, True), (480, True)]
 
 
 @pytest.mark.asyncio
@@ -537,3 +691,76 @@ async def test_many_changes_generate_one_message_per_target(
         len(call.args[1].chain) == 1
         for call in plugin.context.send_message.call_args_list
     )
+
+
+@pytest.mark.asyncio
+async def test_template_selection_survives_restart_without_resetting_baseline(
+    watcher_factory, monkeypatch, tmp_path
+):
+    entry = {
+        "entry_id": "one",
+        "base_url": "https://example.test",
+        "umo_whitelist": ["bot:GroupMessage:1"],
+    }
+    plugin = await watcher_factory(entries=[entry])
+    plugin._clients["one"] = AsyncMock()
+    monkeypatch.setattr(
+        main,
+        "fetch_catalog",
+        AsyncMock(return_value={"new-model": {"id": "new-model"}}),
+    )
+    plugin._state["entries"]["one"]["snapshot"] = {}
+    plugin.context.send_message.return_value = False
+    await plugin._run_cycle(plugin._specs[0])
+    before = copy.deepcopy(plugin._state["entries"]["one"])
+    assert before["pending"][0]["notification"]["changes"]["added"] == ["new-model"]
+    reloaded = await watcher_factory(
+        entries=[dict(entry, card_template="dark")], stored=plugin._state
+    )
+    assert reloaded._state["entries"]["one"]["snapshot"] == before["snapshot"]
+    image = tmp_path / "rendered.png"
+    image.write_bytes(b"image")
+    reloaded.html_render = AsyncMock(return_value=str(image))
+    original_render = Mock(side_effect=AssertionError("Unexpected classic fallback"))
+    monkeypatch.setattr(main, "render_card", original_render)
+    await reloaded._deliver(reloaded._specs[0])
+    reloaded.html_render.assert_awaited_once()
+    template, data = reloaded.html_render.call_args.args
+    assert "#101319" in template
+    assert data["added"] == ["new-model"]
+    assert data["name"] == "Provider"
+    original_render.assert_not_called()
+    assert reloaded._state["entries"]["one"]["pending"] == []
+
+
+@pytest.mark.asyncio
+async def test_provider_template_choices_are_independent_and_render_failure_falls_back(
+    watcher_factory, monkeypatch
+):
+    entries = [
+        {
+            "entry_id": key,
+            "base_url": "https://example.test",
+            "card_template": style,
+            "umo_whitelist": ["bot:GroupMessage:1"],
+        }
+        for key, style in [("one", "light"), ("two", "bold")]
+    ]
+    plugin = await watcher_factory(entries=entries)
+    plugin.html_render = AsyncMock(side_effect=RuntimeError("Renderer unavailable"))
+    original_render = Mock(return_value=b"image")
+    monkeypatch.setattr(main, "render_card", original_render)
+    monkeypatch.setattr(
+        main,
+        "fetch_catalog",
+        AsyncMock(return_value={"new-model": {"id": "new-model"}}),
+    )
+    for spec in plugin._specs:
+        plugin._clients[spec.entry_id] = AsyncMock()
+        plugin._state["entries"][spec.entry_id]["snapshot"] = {}
+        await plugin._run_cycle(spec)
+    assert plugin.html_render.await_count == 2
+    assert "#f5f6fa" in plugin.html_render.call_args_list[0].args[0]
+    assert "#f4f08e" in plugin.html_render.call_args_list[1].args[0]
+    assert original_render.call_count == 2
+    assert plugin.context.send_message.await_count == 2

@@ -1,0 +1,208 @@
+body {
+  --ink:#151515;
+  --muted:#53504d;
+  --line:#191919;
+  --surface:#fffef6;
+  --accent:#151515;
+  --tint:#c3b6f6;
+  --oldbg:#f2ece5;
+  --newbg:#d3f5b5;
+  --newfg:#25451c;
+  background:#f4f08e;
+  color:#151515
+}
+.canvas {
+  padding:42px
+}
+.topline {
+  font-family:Consolas,'Microsoft YaHei';
+  margin-bottom:28px
+}
+.brandmark {
+  border-radius:0;
+  transform:rotate(45deg);
+  background:#ad9dea;
+  border-width:3px
+}
+.preview {
+  border:2px solid black;
+  border-radius:0;
+  background:#fffef6;
+  box-shadow:4px 4px 0 #191919;
+  color:#151515
+}
+.hero {
+  border:3px solid #191919;
+  box-shadow:7px 7px 0 #191919;
+  background:#fffef6;
+  padding:29px 30px 27px;
+  margin-bottom:31px
+}
+.hero h1 {
+  font-size:50px;
+  font-weight:900;
+  letter-spacing:-2px;
+  margin-bottom:14px
+}
+.eyebrow {
+  font-family:Consolas,monospace;
+  font-size:18px;
+  letter-spacing:2px;
+  background:#c3b6f6;
+  display:inline-block;
+  padding:3px 8px;
+  margin-bottom:14px
+}
+.date {
+  font:18px/1.7 Consolas,'Microsoft YaHei';
+  margin-top:37px;
+  color:#333
+}
+.provider {
+  font-size:23px
+}
+.sub {
+  font-size:19px
+}
+.stats {
+  gap:20px;
+  margin-bottom:27px
+}
+.stat {
+  border:3px solid #191919;
+  border-radius:0;
+  box-shadow:5px 5px 0 #191919;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:16px 23px;
+  background:#c3b6f6
+}
+.stat:nth-child(2) {
+  background:#d3f5b5
+}
+.stat:nth-child(3) {
+  background:#f7bfab
+}
+.stat-value {
+  font:700 45px Consolas;
+  order:1;
+  margin:0
+}
+.stat-label {
+  color:#151515;
+  order:2;
+  font-size:20px
+}
+.stat-unit {
+  display:none
+}
+.section-label {
+  font:700 18px Consolas,'Microsoft YaHei';
+  color:#151515
+}
+.models {
+  gap:25px
+}
+.model {
+  border:3px solid #191919;
+  border-radius:0;
+  box-shadow:7px 7px 0 #191919
+}
+.model-head {
+  border-bottom:3px solid #191919;
+  padding:17px 23px;
+  background:#c3b6f6
+}
+.model:nth-child(even) .model-head {
+  background:#f5bb9f
+}
+.model-index {
+  background:#191919;
+  color:#fff;
+  border-radius:0;
+  width:31px;
+  height:31px;
+  font:700 19px Consolas
+}
+.model-name {
+  font-size:27px
+}
+.tag {
+  border:2px solid #191919;
+  border-radius:0;
+  background:#fffef6;
+  color:#151515;
+  font-weight:700
+}
+.field {
+  padding:22px 24px
+}
+.field-title {
+  font-size:18px;
+  margin-bottom:13px
+}
+.path {
+  color:#55524f
+}
+.values {
+  gap:12px;
+  grid-template-columns:1fr 28px 1fr
+}
+.value {
+  border:2px solid #191919;
+  border-radius:0;
+  padding:15px 16px
+}
+.value-label {
+  font-size:15px;
+  font-weight:700;
+  color:#333
+}
+.value code {
+  font-size:23px
+}
+.fingerprint .values {
+  grid-template-columns:1fr
+}
+.fingerprint .value {
+  display:flex;
+  gap:23px;
+  align-items:center
+}
+.fingerprint .value-label {
+  margin:0;
+  width:55px
+}
+.fingerprint .value code {
+  font-size:25px
+}
+.fingerprint .arrow {
+  display:none
+}
+.fingerprint .field-title {
+  display:none
+}
+.members {
+  gap:20px
+}
+.member {
+  border:3px solid #191919;
+  border-radius:0;
+  box-shadow:4px 4px 0 #191919;
+  background:#d3f5b5
+}
+.member.removed {
+  background:#f7bfab
+}
+.member-title {
+  font-weight:700;
+  color:#151515!important
+}
+.footer {
+  border-top:2px solid #191919;
+  color:#333;
+  font:15px Consolas,'Microsoft YaHei';
+  margin-top:34px
+}
+

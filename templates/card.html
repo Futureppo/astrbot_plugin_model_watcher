@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1200">
+  <style>/* CARD_STYLES */</style>
+</head>
+<body>
+  <div class="canvas {{ mode|e }}">
+    <div class="sheet">
+      <div class="topline">
+        <div class="brand"><span class="brandmark"></span>MODEL WATCHER</div>
+        <span class="preview">{{ kind|e }}</span>
+      </div>
+      <header class="hero">
+        <div>
+          <div class="eyebrow">{{ label|e }}</div>
+          <h1>{{ title|e }}</h1>
+          <div class="sub"><span class="provider">{{ name|e }}</span> &nbsp; / &nbsp; {{ base_url|e }}</div>
+        </div>
+        <div class="date">{{ date|e }}<br>{{ time|e }}</div>
+      </header>
+      <div class="body-layout">
+        <aside class="rail">
+          <h3>当前模型</h3><strong>{{ total|e }}</strong>
+          <h3>变化模型</h3><strong style="color:#ffac62">{{ models|length }}</strong>
+          <small><span class="state-dot"></span>变更已检测</small>
+          <div class="rail-bottom">{{ name|e }}<br>{{ date|e }}<br>{{ time|e }}</div>
+        </aside>
+        <main>
+          <div class="stats">
+            {% for name, value in [('变化模型', models|length), ('新增模型', added|length), ('下架模型', removed|length)] %}
+            <div class="stat">
+              <span class="stat-label">{{ name|e }}</span>
+              <strong class="stat-value">{{ value }}</strong><span class="stat-unit">个</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% if added or removed %}
+          <div class="members">
+            {% for kind, label, ids in [('added', '+ 新增模型', added), ('removed', '− 下架模型', removed)] %}
+            {% if ids %}
+            <div class="member {{ kind }}">
+              <div class="member-title">{{ label|e }}</div>
+              <div class="membership-list">{% for id in ids %}<code>{{ id|e }}</code>{% endfor %}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="section-label"><span>变更明细</span><span>当前共 {{ total|e }} 个模型</span></div>
+          <div class="models">
+            {% for model in models %}
+            <section class="model">
+              <div class="model-head">
+                <span class="model-index">{{ loop.index }}</span>
+                <span class="model-name">{{ model.id|e }}</span>
+                <span class="tag">{{ model.fields|length }} 项变化</span>
+              </div>
+              {% for field in model.fields %}
+              <div class="field">
+                <div class="field-title">
+                  {{ field.label|e }}<span class="path">{{ field.path|e }}</span>
+                  {% if field.note %}<span class="field-note">{{ field.note|e }}</span>{% endif %}
+                  {% if field.summary %}<span class="summary">{{ field.summary|e }}</span>{% endif %}
+                </div>
+                <div class="values">
+                  <div class="value old"><span class="value-label">旧值</span><code>{{ field.old|e }}</code></div>
+                  <div class="arrow">→</div>
+                  <div class="value new"><span class="value-label">新值</span><code>{{ field.new|e }}</code></div>
+                </div>
+                <div class="diffrows">
+                  <div class="diffrow old"><span class="lineno">1</span><span class="sign">−</span><code><span class="diff-label">旧值</span>{{ field.old|e }}</code></div>
+                  <div class="diffrow new"><span class="lineno">2</span><span class="sign">+</span><code><span class="diff-label">新值</span>{{ field.new|e }}</code></div>
+                </div>
+              </div>
+              {% endfor %}
+            </section>
+            {% endfor %}
+          </div>
+        </main>
+      </div>
+      <footer class="footer"><span>Futureppo / astrbot_plugin_model_watcher</span><span>MODEL CHANGE REPORT</span></footer>
+    </div>
+  </div>
+</body>
+</html>

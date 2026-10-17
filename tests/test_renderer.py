@@ -1,11 +1,19 @@
 """Complete single-image cards, wrapping, and font fallback tests."""
 
+import json
 from io import BytesIO
+from pathlib import Path
 
 import pytest
+from jinja2 import Environment, StrictUndefined
 from PIL import Image
 
 from data.plugins.astrbot_plugin_model_watcher import renderer
+from data.plugins.astrbot_plugin_model_watcher.card_templates import build_card_template
+from data.plugins.astrbot_plugin_model_watcher.catalog import (
+    CARD_TEMPLATE_LABELS,
+    WatchSpec,
+)
 
 
 @pytest.fixture
@@ -99,3 +107,68 @@ def test_oversized_image_fails_before_allocation(monkeypatch):
     )
     with pytest.raises(ValueError, match="pixel budget"):
         renderer.render_card("model\n" * 1500)
+
+
+@pytest.mark.parametrize("template_key", ["light", "dark", "diff", "soft", "bold"])
+def test_shared_templates_preserve_data_and_escape_markup(notice, template_key):
+    notice["name"] = '<img src="https://example.test">{{7*7}}'
+    notice["deepseek"] = True
+    notice["changes"]["changed"] = {
+        "deepseek-flash": [
+            {
+                "path": "owned_by",
+                "old": None,
+                "new": "deepseek",
+                "old_exists": False,
+                "new_exists": True,
+            },
+            {
+                "path": "max_output_tokens",
+                "old": 100,
+                "new": None,
+                "old_exists": True,
+                "new_exists": False,
+            },
+            {
+                "path": "input_modalities",
+                "old": ["text"],
+                "new": ["text", "image"],
+                "old_exists": True,
+                "new_exists": True,
+            },
+        ],
+    }
+    template, data = build_card_template(notice, template_key)
+    rendered = Environment(undefined=StrictUndefined).from_string(template).render(data)
+    assert '<img src="https://example.test">' not in rendered
+    assert "&lt;img src=" in rendered and "{{7*7}}" in rendered
+    assert "new-model" in rendered and "old-model" in rendered
+    fields = data["models"][0]["fields"]
+    assert fields[0]["old"] == "（不存在）" and fields[0]["note"] == "信息补全"
+    assert fields[1]["new"] == "（不存在）"
+    assert fields[2]["summary"] == '新增 ["image"]'
+    assert "api.deepseek.com" not in rendered
+    assert "模拟数据" not in rendered
+
+
+def test_every_provider_offers_shared_templates():
+    schema = json.loads(
+        (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
+    )
+    for key, provider in schema["providers"]["templates"].items():
+        field = provider["items"]["card_template"]
+        assert field["type"] == "string" and field["default"] == "classic"
+        assert field["options"] == list(CARD_TEMPLATE_LABELS)
+        assert field["labels"] == list(CARD_TEMPLATE_LABELS.values())
+        entry = {name: item["default"] for name, item in provider["items"].items()}
+        entry.update(entry_id=key, __template_key=key)
+        if key == "custom":
+            entry["full_url"] = "https://example.test/models"
+        assert WatchSpec.from_entry(entry).card_template == "classic"
+        for template_key in CARD_TEMPLATE_LABELS:
+            assert (
+                WatchSpec.from_entry(
+                    dict(entry, card_template=template_key)
+                ).card_template
+                == template_key
+            )

@@ -23,7 +23,28 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 
 各内置提供商的 API Key 说明附有官网获取地址，复制到浏览器打开即可。国内站、国际站使用对应地址；Hugging Face 提供访问令牌地址，Vertex 提供服务账号管理地址。
 
-默认没有监控条目。新条目第一次成功请求只建立基线，不推送已有模型；以后才推送变化。插件不调用模型进行可用性测试。
+默认没有监控条目。新条目第一次成功请求只建立基线，不推送已有模型；以后才推送变化。DeepSeek 的可选指纹探测会发起简短推理请求，默认关闭。
+
+## 通知图片模板
+
+每个提供商条目的“推送 UMO 白名单”下方都有独立的“通知图片模板”下拉框，包括自定义渠道。同一提供商添加多个条目时，也可以各选一套。
+
+| 模板 | 样式 |
+| --- | --- |
+| 原版（默认） | 原有本地绘制的通知卡片 |
+| A · 浅色卡片 | 细边框、留白和分组卡片 |
+| B · 深色监控台 | 深灰面板、橙色强调和侧栏指标 |
+| C · 差异对照 | 红绿底色，逐行对照旧值和新值 |
+| D · 柔和彩色卡片 | 大圆角、胶囊标签和并排模型卡片 |
+| E · 粗边框拼色 | 黑色描边、硬阴影和拼色区块 |
+
+A～E 是所有提供商共用的模板，使用 AstrBot 已配置的 HTML 图片渲染服务；未配置地址时使用 AstrBot 的默认渲染服务，通知内容会发送到该服务。插件不需要安装浏览器。新模板渲染失败时尝试原版本地图片，再失败才使用完整文字通知。
+
+选择模板只改变通知外观，不重置模型列表或指纹基线，不改变检查内容和推送目标。待发送通知保存结构化变更，重载后按当前所选模板重试；此前仅保存文字的待发送通知仍使用原版图片。API Key 和请求认证头不进入模板数据。
+
+模板资源集中在 `templates/`，数据整理在 `card_templates.py`。后续提供商专属模板可增加独立资源，并只在对应提供商的下拉框里添加选项；现有 A～E 保持共用。
+
+样式参考：[shadcn/ui](https://ui.shadcn.com/blocks?category=dashboard)、[Grafana](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/stat/)、[GitHub Primer](https://primer.style/product/getting-started/react/theme-reference/)、[Material Web](https://github.com/material-components/material-web/blob/main/docs/theming/color.md)、[Neobrutalism components](https://www.neobrutalism.dev/docs/card)。这些通知模板按其设计风格重新排版。
 
 ## 提供商模板
 
@@ -162,7 +183,7 @@ OR 价格使用十进制数值比较，`0.000001` 与 `0.0000010` 不触发通�
 
 #### DeepSeek
 
-DeepSeek 的“检查内容”单选改为“检查内容（可多选）”，使用独立配置字段 `detection_items`，默认勾选以下前 7 项；“其他元数据”默认不选。
+DeepSeek 的“检查内容”使用独立多选配置字段 `detection_items`，默认勾选以下前 7 项；“其他元数据”和“后端指纹”默认不选。
 
 | 检查项目 | 字段范围 |
 | --- | --- |
@@ -174,10 +195,17 @@ DeepSeek 的“检查内容”单选改为“检查内容（可多选）”，�
 | 推理档位与默认配置 | `effort.supported_levels`、`effort.default_level` |
 | API 能力与限制 | `api_capabilities` 下的全部字段，包括 `anthropic_messages.system_prompt_update` |
 | 其他元数据（高级） | `object` 及未归入上述类别的字段，不包含 `owned_by` 等已分类字段 |
+| 后端指纹（system_fingerprint） | 通过独立推理请求读取响应中的 `system_fingerprint`，需同时打开下方探测开关 |
 
 模态和支持的推理档位列表忽略顺序及重复项，通知展示实际增减。属性从缺失或 `null` 补为有值时提示“信息补全”，字段删除也会通知。其余数组按原始顺序比较，价格等未列入专项分类的字段归入其他元数据。
 
-全部取消时暂停变化通知并清空待发通知，继续更新快照；重新勾选后不补发暂停期间的变化。修改检查项目或忽略路径会清理旧规则的待发通知，保留快照。仅检测模型对象，不比较请求地址、认证头或响应外层字段。
+全部取消时暂停变化通知并清空待发通知，继续更新模型列表快照；重新勾选后不补发暂停期间的变化。修改检查项目或忽略路径会清理旧规则的待发通知，保留模型列表快照。模型列表检查仅检测模型对象，不比较请求地址、认证头或响应外层字段。
+
+“检查内容”下方的“后端指纹探测设置”提供独立开关（默认关闭）、`max_tokens`（默认 16）和检测间隔（默认 240 秒）。只有勾选“后端指纹”并打开开关才会发起请求；在忽略路径中填写 `system_fingerprint` 或 `$` 也会停止探测。
+
+探测使用本条目的基础 API、API Key 和代理，向基础 API 后追加 `/chat/completions`（基础 API 已带 `/v1` 时保留），对最新模型列表中的每个模型发送 `hi`，设置 `thinking.type=disabled`、`stream=false` 和配置的 `max_tokens`。完整 API 仅用于模型列表。探测会消耗 token，每轮探测完成后独立等待配置的间隔，不跟随模型列表更新间隔。
+
+每个模型首次取得有效指纹只建立基线，之后发生变化时推送旧值和新值。基线随插件状态持久保存，重启可继续比较；请求失败、指纹缺失、空值或返回错误时保留上次有效值。关闭探测或取消勾选会清理指纹基线，重新启用时重新建立。指纹变化表示后端配置可能发生变化，不直接判定为模型版本升级。
 
 #### 忽略属性
 

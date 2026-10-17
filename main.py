@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -15,7 +16,8 @@ from astrbot.api import AstrBotConfig, logger, star
 from astrbot.api.event import MessageChain, filter
 from astrbot.api.message_components import Image, Plain
 
-from .catalog import WatchSpec, compare_catalogs, fetch_catalog
+from .card_templates import build_card_template
+from .catalog import WatchSpec, compare_catalogs, fetch_catalog, fetch_fingerprints
 from .diagnostics import describe_fetch_failure
 from .renderer import format_notification, render_card
 
@@ -113,13 +115,23 @@ class ModelWatcher(star.Star):
                 state["ignored_paths"] = list(spec.ignored_paths)
             else:
                 state.pop("ignored_paths", None)
+            if spec.is_deepseek:
+                if (
+                    not spec.fingerprint_enabled
+                    or state.get("system_fingerprint_url") != spec.fingerprint_url
+                ):
+                    state.pop("system_fingerprints", None)
+                    if state.pop("system_fingerprint_url", None):
+                        state["pending"] = []
+                if spec.fingerprint_enabled:
+                    state["system_fingerprint_url"] = spec.fingerprint_url
             pending = []
             for notice in state["pending"]:
                 targets = [
                     target for target in notice["targets"] if target in spec.targets
                 ]
                 if targets:
-                    pending.append({"text": notice["text"], "targets": targets})
+                    pending.append({**notice, "targets": targets})
             state["pending"] = pending
         if changed:
             self.config.save_config()
@@ -164,28 +176,66 @@ class ModelWatcher(star.Star):
         Args:
             spec: Provider to monitor until plugin termination.
         """
+        loop = asyncio.get_running_loop()
+        intervals = {False: spec.interval}
+        if spec.fingerprint_enabled:
+            intervals[True] = spec.fingerprint_interval
+        next_runs = dict.fromkeys(intervals, 0.0)
         while not self._stopping:
-            try:
-                await self._run_cycle(spec)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "Model watcher cycle failed for entry %s (%s).",
-                    spec.entry_id,
-                    type(exc).__name__,
-                )
-            await asyncio.sleep(spec.interval)
+            for fingerprints, interval in intervals.items():
+                if loop.time() < next_runs[fingerprints]:
+                    continue
+                try:
+                    await self._run_cycle(spec, fingerprints=fingerprints)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "Model watcher %s cycle failed for entry %s (%s).",
+                        "fingerprint" if fingerprints else "catalog",
+                        spec.entry_id,
+                        type(exc).__name__,
+                    )
+                next_runs[fingerprints] = loop.time() + interval
+            await asyncio.sleep(max(0, min(next_runs.values()) - loop.time()))
 
-    async def _run_cycle(self, spec: WatchSpec) -> None:
-        """Commit a valid catalog and queue changes before trying deliveries.
+    async def _run_cycle(self, spec: WatchSpec, *, fingerprints: bool = False) -> None:
+        """Commit catalog or fingerprint changes before trying deliveries.
 
         Args:
             spec: Provider whose next polling cycle should run.
+            fingerprints: Probe backend fingerprints instead of fetching the catalog.
         """
+        if fingerprints and not spec.fingerprint_enabled:
+            return
+        snapshot_key = "system_fingerprints" if fingerprints else "snapshot"
+        checks = (
+            ("system_fingerprint",)
+            if fingerprints
+            else tuple(
+                key for key in spec.comparison_mode if key != "system_fingerprint"
+            )
+        )
         current = None
         try:
-            current = await fetch_catalog(self._clients[spec.entry_id], spec)
+            if fingerprints:
+                entry_state = self._state["entries"][spec.entry_id]
+                models = entry_state["snapshot"]
+                if models is not None:
+                    # Failed probes retain their last successful value. Removed
+                    # models are dropped without generating fingerprint notices.
+                    current = {
+                        model_id: value
+                        for model_id, value in entry_state.get(snapshot_key, {}).items()
+                        if model_id in models
+                    }
+                    current.update(
+                        await fetch_fingerprints(
+                            self._clients[spec.entry_id], spec, models
+                        )
+                    )
+            else:
+                current = await fetch_catalog(self._clients[spec.entry_id], spec)
         except Exception as exc:
             logger.warning(
                 "Model watcher fetch failed: %s; keeping its baseline.",
@@ -195,13 +245,13 @@ class ModelWatcher(star.Star):
             async with self._state_lock:
                 existing = self._state["entries"][spec.entry_id]
                 state = copy.deepcopy(existing)
-                previous = state["snapshot"]
+                previous = state.get(snapshot_key)
                 if previous is not None and spec.targets:
                     changes = compare_catalogs(
                         previous,
                         current,
                         spec.ignored_paths,
-                        checks=spec.comparison_mode,
+                        checks=checks,
                         openrouter=spec.is_openrouter,
                         deepseek=spec.is_deepseek,
                     )
@@ -220,17 +270,24 @@ class ModelWatcher(star.Star):
                         notice = {
                             "openrouter": spec.is_openrouter,
                             "deepseek": spec.is_deepseek,
+                            "fingerprints": fingerprints,
                             "name": spec.name,
                             "base_url": spec.base_url,
                             "time": detected_at.strftime("%Y-%m-%d %H:%M:%S %z"),
-                            "count": len(current),
+                            "count": len(state["snapshot"])
+                            if fingerprints
+                            else len(current),
                             "changes": changes,
                         }
                         text = await asyncio.to_thread(format_notification, notice)
                         state["pending"].append(
-                            {"text": text, "targets": list(spec.targets)}
+                            {
+                                "text": text,
+                                "notification": notice,
+                                "targets": list(spec.targets),
+                            }
                         )
-                state["snapshot"] = current
+                state[snapshot_key] = current
                 # Persist snapshot and outbox together. Roll back on storage failure.
                 self._state["entries"][spec.entry_id] = state
                 try:
@@ -255,14 +312,37 @@ class ModelWatcher(star.Star):
             ]
             if not targets:
                 continue
-            try:
-                png = await asyncio.to_thread(render_card, notice["text"])
-            except Exception as exc:
-                logger.warning(
-                    "Model watcher card rendering failed (%s); using text.",
-                    type(exc).__name__,
-                )
-                png = None
+            png = None
+            if spec.card_template != "classic" and notice.get("notification"):
+                try:
+                    template, data = await asyncio.to_thread(
+                        build_card_template, notice["notification"], spec.card_template
+                    )
+                    path = await asyncio.wait_for(
+                        self.html_render(
+                            template,
+                            data,
+                            return_url=False,
+                            options={"full_page": True, "type": "jpeg", "quality": 95},
+                        ),
+                        timeout=30,
+                    )
+                    png = await asyncio.to_thread(Path(path).read_bytes)
+                except Exception as exc:
+                    logger.warning(
+                        "Model watcher template %s failed for entry %s (%s); using the classic card.",
+                        spec.card_template,
+                        spec.entry_id,
+                        type(exc).__name__,
+                    )
+            if not png:
+                try:
+                    png = await asyncio.to_thread(render_card, notice["text"])
+                except Exception as exc:
+                    logger.warning(
+                        "Model watcher card rendering failed (%s); using text.",
+                        type(exc).__name__,
+                    )
             for target in targets:
                 attempted.add(target)
                 chain = (

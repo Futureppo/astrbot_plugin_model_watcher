@@ -14,9 +14,19 @@ from typing import Any
 
 import httpx
 
+from astrbot.api import logger
 from astrbot.core.platform.message_session import MessageSession
 
 _PRIVATE_REQUEST = ContextVar("model_watcher_private_request", default=False)
+
+CARD_TEMPLATE_LABELS = {
+    "classic": "原版",
+    "light": "A · 浅色卡片",
+    "dark": "B · 深色监控台",
+    "diff": "C · 差异对照",
+    "soft": "D · 柔和彩色卡片",
+    "bold": "E · 粗边框拼色",
+}
 
 CHECK_LABELS = {
     "membership": "模型新增、下架",
@@ -65,6 +75,7 @@ DEEPSEEK_CHECK_LABELS = {
     "reasoning": "推理档位与默认配置",
     "api_capabilities": "API 能力与限制",
     "metadata": "其他元数据（高级）",
+    "system_fingerprint": "后端指纹（system_fingerprint）",
 }
 DEEPSEEK_ATTRIBUTE_GROUPS = {
     "id": "membership",
@@ -77,6 +88,7 @@ DEEPSEEK_ATTRIBUTE_GROUPS = {
     "effort.supported_levels": "reasoning",
     "effort.default_level": "reasoning",
     "api_capabilities": "api_capabilities",
+    "system_fingerprint": "system_fingerprint",
 }
 DEEPSEEK_SET_PATHS = {
     "input_modalities",
@@ -213,6 +225,11 @@ class WatchSpec:
     is_openrouter: bool
     is_deepseek: bool
     fingerprint: str
+    fingerprint_enabled: bool
+    fingerprint_interval: int
+    fingerprint_max_tokens: int
+    fingerprint_url: str
+    card_template: str
 
     @classmethod
     def from_entry(cls, entry: dict) -> WatchSpec:
@@ -279,7 +296,11 @@ class WatchSpec:
             selection = (
                 entry.get(
                     "detection_items",
-                    [key for key in DEEPSEEK_CHECK_LABELS if key != "metadata"],
+                    [
+                        key
+                        for key in DEEPSEEK_CHECK_LABELS
+                        if key not in {"metadata", "system_fingerprint"}
+                    ],
                 )
                 if is_deepseek
                 else entry.get("comparison_mode", ["membership"])
@@ -305,6 +326,24 @@ class WatchSpec:
                 interval = 30
         except (TypeError, ValueError, OverflowError):
             interval = 30
+        probe = entry.get("fingerprint_probe", {}) if is_deepseek else {}
+        if not isinstance(probe, dict):
+            raise ValueError("Fingerprint probe settings must be an object")
+        fingerprint_enabled = (
+            is_deepseek
+            and probe.get("enabled", False) is True
+            and "system_fingerprint" in comparison_mode
+        )
+        probe_limits = {}
+        for key, default in (("interval_seconds", 240), ("max_tokens", 16)):
+            raw = probe.get(key, default)
+            try:
+                value = int(raw)
+                if isinstance(raw, bool) or str(value) != str(raw) or value <= 0:
+                    value = default
+            except (TypeError, ValueError, OverflowError):
+                value = default
+            probe_limits[key] = value
         targets = []
         for raw in entry.get("umo_whitelist", []):
             if not isinstance(raw, str):
@@ -338,6 +377,24 @@ class WatchSpec:
                 not part for part in path.removeprefix("$.").split(".")
             ):
                 raise ValueError("JSON paths cannot contain empty segments")
+        fingerprint_enabled = fingerprint_enabled and not any(
+            path.removeprefix("$.") in {"$", "system_fingerprint"} for path in ignored
+        )
+        fingerprint_url = ""
+        if fingerprint_enabled:
+            try:
+                probe_url = httpx.URL(base_url + "/chat/completions")
+            except httpx.InvalidURL as exc:
+                raise ValueError("Invalid fingerprint probe URL") from exc
+            if (
+                probe_url.scheme not in {"http", "https"}
+                or not probe_url.host
+                or probe_url.userinfo
+                or probe_url.fragment
+                or probe_url.query
+            ):
+                raise ValueError("Fingerprint probing requires a valid base API URL")
+            fingerprint_url = str(probe_url)
         api_key = str(entry.get("api_key") or "").strip()
         auth = None
         if api_type == "vertex" and api_key:
@@ -349,6 +406,12 @@ class WatchSpec:
         if api_type != "openai":
             identity.append(api_type)
         fingerprint = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        card_template = entry.get("card_template", "classic")
+        if (
+            not isinstance(card_template, str)
+            or card_template not in CARD_TEMPLATE_LABELS
+        ):
+            raise ValueError("Invalid notification card template")
         return cls(
             entry_id=str(entry["entry_id"]),
             name=str(entry.get("name") or entry.get("__template_key") or "Provider"),
@@ -367,6 +430,11 @@ class WatchSpec:
             is_openrouter=is_openrouter,
             is_deepseek=is_deepseek,
             fingerprint=fingerprint,
+            fingerprint_enabled=fingerprint_enabled,
+            fingerprint_interval=probe_limits["interval_seconds"],
+            fingerprint_max_tokens=probe_limits["max_tokens"],
+            fingerprint_url=fingerprint_url,
+            card_template=card_template,
         )
 
 
@@ -471,6 +539,84 @@ async def fetch_catalog(client: httpx.AsyncClient, spec: WatchSpec) -> dict[str,
         if (url.scheme, url.host, url.port) != origin or url.userinfo or url.fragment:
             raise ValueError("Pagination must remain on the API origin")
     raise ValueError("Catalog exceeded the pagination limit")
+
+
+async def fetch_fingerprints(
+    client: httpx.AsyncClient, spec: WatchSpec, models: dict[str, Any]
+) -> dict[str, Any]:
+    """Probe each catalog model and return only valid backend fingerprints.
+
+    Args:
+        client: HTTP client using the provider's proxy and timeout.
+        spec: DeepSeek configuration with explicitly enabled probes.
+        models: Latest catalog whose model IDs should receive a short greeting.
+
+    Returns:
+        Successful model fingerprints; failed or missing values are omitted.
+    """
+    fingerprints = {}
+    if not spec.fingerprint_enabled:
+        return fingerprints
+    headers = {"Accept": "application/json"}
+    if spec.api_key:
+        headers["Authorization"] = f"Bearer {spec.api_key}"
+    request_filter = RequestLogFilter()
+    dependency_loggers = [
+        logging.getLogger(name)
+        for name in list(logging.Logger.manager.loggerDict)
+        if name == "httpx" or name.startswith("httpcore.")
+    ]
+    for dependency_logger in dependency_loggers:
+        dependency_logger.addFilter(request_filter)
+    token = _PRIVATE_REQUEST.set(True)
+    try:
+        for model_id in models:
+            try:
+                response = await asyncio.wait_for(
+                    client.post(
+                        spec.fingerprint_url,
+                        headers=headers,
+                        json={
+                            "model": model_id,
+                            "messages": [{"role": "user", "content": "hi"}],
+                            "max_tokens": spec.fingerprint_max_tokens,
+                            "thinking": {"type": "disabled"},
+                            "stream": False,
+                        },
+                    ),
+                    timeout=15,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                value = (
+                    payload.get("system_fingerprint")
+                    if isinstance(payload, dict)
+                    else None
+                )
+                if (
+                    not isinstance(value, str)
+                    or not value.strip()
+                    or payload.get("error")
+                ):
+                    raise ValueError("Response has no valid system_fingerprint")
+                fingerprints[model_id] = {"system_fingerprint": value}
+            except Exception as exc:
+                status = (
+                    f"HTTP {exc.response.status_code}"
+                    if isinstance(exc, httpx.HTTPStatusError)
+                    else type(exc).__name__
+                )
+                logger.warning(
+                    "Model watcher fingerprint probe failed for entry %s, model %s (%s); keeping its baseline.",
+                    spec.entry_id,
+                    model_id,
+                    status,
+                )
+    finally:
+        _PRIVATE_REQUEST.reset(token)
+        for dependency_logger in dependency_loggers:
+            dependency_logger.removeFilter(request_filter)
+    return fingerprints
 
 
 def compare_catalogs(

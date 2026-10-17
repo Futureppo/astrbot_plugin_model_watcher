@@ -1,0 +1,182 @@
+body {
+  --ink:#1f2328;
+  --muted:#656d76;
+  --line:#d0d7de;
+  --surface:#fff;
+  --accent:#0969da;
+  --tint:#ddf4ff;
+  --oldbg:#ffebe9;
+  --newbg:#e6ffec;
+  --newfg:#116329;
+  background:#fff;
+  color:#1f2328
+}
+.canvas {
+  padding:42px
+}
+.topline {
+  padding-bottom:22px;
+  border-bottom:1px solid #d0d7de
+}
+.brandmark {
+  border-radius:50%;
+  color:#24292f
+}
+.brand {
+  font-family:Consolas,monospace
+}
+.hero h1 {
+  font-size:43px
+}
+.eyebrow {
+  font-size:16px;
+  color:#656d76;
+  letter-spacing:1px
+}
+.preview {
+  border-radius:30px
+}
+.stats {
+  display:flex;
+  align-items:center;
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  padding:19px 0;
+  margin-top:24px
+}
+.stat {
+  padding:0 25px;
+  border:0;
+  border-radius:0;
+  border-right:1px solid var(--line);
+  display:flex;
+  align-items:baseline;
+  gap:10px
+}
+.stat:first-child {
+  padding-left:0
+}
+.stat:last-child {
+  border:0
+}
+.stat-label {
+  font-size:19px;
+  order:2
+}
+.stat-value {
+  font-size:27px;
+  margin:0
+}
+.stat-unit {
+  display:none
+}
+.stat:nth-child(2) .stat-value {
+  color:#1f883d
+}
+.stat:nth-child(3) .stat-value {
+  color:#cf222e
+}
+.model {
+  border-radius:8px
+}
+.model-head {
+  padding:20px;
+  background:#f6f8fa;
+  gap:12px
+}
+.model-index {
+  width:27px;
+  height:27px;
+  border-radius:4px;
+  background:#fff;
+  border:1px solid #d0d7de;
+  color:#57606a;
+  font-size:15px
+}
+.model-name {
+  font-size:24px
+}
+.tag {
+  color:#0969da;
+  background:#ddf4ff;
+  border:0
+}
+.field {
+  padding:0!important
+}
+.field-title {
+  padding:16px 20px;
+  margin:0;
+  background:#f6f8fa;
+  font-weight:400;
+  font-size:18px
+}
+.path {
+  color:#57606a
+}
+.values {
+  display:none
+}
+.diffrows {
+  display:block
+}
+.diffrow {
+  display:grid;
+  grid-template-columns:42px 38px 1fr;
+  padding:14px 16px;
+  font:23px/1.45 Consolas,'Microsoft YaHei';
+  background:#ffebe9
+}
+.diffrow.new {
+  background:#e6ffec
+}
+.lineno {
+  color:#79828b;
+  font-size:17px;
+  padding-top:4px
+}
+.sign {
+  color:#cf222e
+}
+.new .sign {
+  color:#1f883d
+}
+.diffrow code {
+  font:inherit;
+  overflow-wrap:anywhere
+}
+.diff-label {
+  color:#656d76;
+  font-family:'Microsoft YaHei';
+  font-size:17px;
+  margin-right:22px
+}
+.members {
+  gap:0;
+  border:1px solid #d0d7de;
+  border-radius:8px;
+  overflow:hidden
+}
+.member {
+  border:0;
+  border-radius:0;
+  background:#e6ffec;
+  padding:18px 22px
+}
+.member.removed {
+  background:#ffebe9
+}
+.member code {
+  font-size:23px
+}
+.section-label {
+  font-size:17px
+}
+.catalog .field-title .path {
+  flex-basis:auto;
+  margin:0
+}
+.footer {
+  font-family:Consolas,'Microsoft YaHei'
+}
+
