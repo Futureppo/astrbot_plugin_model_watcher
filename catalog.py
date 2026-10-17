@@ -56,6 +56,33 @@ SET_PATHS = {
     "supported_voices",
     "reasoning.supported_efforts",
 }
+DEEPSEEK_CHECK_LABELS = {
+    "membership": "模型新增、下架",
+    "name": "模型名称",
+    "provider": "提供商",
+    "context": "上下文与输出长度",
+    "modalities": "输入、输出类型",
+    "reasoning": "推理档位与默认配置",
+    "api_capabilities": "API 能力与限制",
+    "metadata": "其他元数据（高级）",
+}
+DEEPSEEK_ATTRIBUTE_GROUPS = {
+    "id": "membership",
+    "name": "name",
+    "owned_by": "provider",
+    "context_window": "context",
+    "max_output_tokens": "context",
+    "input_modalities": "modalities",
+    "output_modalities": "modalities",
+    "effort.supported_levels": "reasoning",
+    "effort.default_level": "reasoning",
+    "api_capabilities": "api_capabilities",
+}
+DEEPSEEK_SET_PATHS = {
+    "input_modalities",
+    "output_modalities",
+    "effort.supported_levels",
+}
 PRICE_KEYS = {
     "prompt",
     "completion",
@@ -75,13 +102,14 @@ PRICE_KEYS = {
 }
 
 
-def attribute_equal(path: str, before: Any, after: Any) -> bool:
+def attribute_equal(path: str, before: Any, after: Any, deepseek: bool = False) -> bool:
     """Compare catalog values with field-specific numeric and set semantics.
 
     Args:
         path: Model-relative attribute path, including any array indexes.
         before: Previous JSON value.
         after: Current JSON value.
+        deepseek: Use DeepSeek list semantics without OpenRouter pricing rules.
 
     Returns:
         Whether the values are equivalent, retaining unknown array ordering,
@@ -89,20 +117,28 @@ def attribute_equal(path: str, before: Any, after: Any) -> bool:
     """
     if isinstance(before, dict) and isinstance(after, dict):
         return before.keys() == after.keys() and all(
-            attribute_equal(f"{path}.{key}", before[key], after[key]) for key in before
+            attribute_equal(f"{path}.{key}", before[key], after[key], deepseek)
+            for key in before
         )
     if isinstance(before, list) and isinstance(after, list):
-        if path in SET_PATHS or (
-            path.startswith("pricing.overrides.") and path.endswith(".utc_days")
+        set_paths = DEEPSEEK_SET_PATHS if deepseek else SET_PATHS
+        if path in set_paths or (
+            not deepseek
+            and path.startswith("pricing.overrides.")
+            and path.endswith(".utc_days")
         ):
             return {json.dumps(item, sort_keys=True) for item in before} == {
                 json.dumps(item, sort_keys=True) for item in after
             }
         return len(before) == len(after) and all(
-            attribute_equal(f"{path}.{index}", old, new)
+            attribute_equal(f"{path}.{index}", old, new, deepseek)
             for index, (old, new) in enumerate(zip(before, after))
         )
-    if path.startswith("pricing.") and path.rsplit(".", 1)[-1] in PRICE_KEYS:
+    if (
+        not deepseek
+        and path.startswith("pricing.")
+        and path.rsplit(".", 1)[-1] in PRICE_KEYS
+    ):
         if all(type(value) in (str, int, float) for value in (before, after)):
             try:
                 old_price, new_price = Decimal(str(before)), Decimal(str(after))
@@ -175,6 +211,7 @@ class WatchSpec:
     ignored_paths: tuple[str, ...]
     comparison_mode: tuple[str, ...]
     is_openrouter: bool
+    is_deepseek: bool
     fingerprint: str
 
     @classmethod
@@ -228,6 +265,7 @@ class WatchSpec:
         except httpx.InvalidURL as exc:
             raise ValueError("Invalid API or proxy URL") from exc
         is_openrouter = entry.get("__template_key") == "openrouter"
+        is_deepseek = entry.get("__template_key") == "deepseek"
         if (
             (is_openrouter or parsed.host == "openrouter.ai")
             and api_type == "openai"
@@ -236,14 +274,21 @@ class WatchSpec:
         ):
             # OpenRouter otherwise defaults to models that produce text output.
             parsed = parsed.copy_set_param("output_modalities", "all")
-        if is_openrouter:
-            selection = entry.get("comparison_mode", ["membership"])
+        if is_openrouter or is_deepseek:
+            labels = DEEPSEEK_CHECK_LABELS if is_deepseek else CHECK_LABELS
+            selection = (
+                entry.get(
+                    "detection_items",
+                    [key for key in DEEPSEEK_CHECK_LABELS if key != "metadata"],
+                )
+                if is_deepseek
+                else entry.get("comparison_mode", ["membership"])
+            )
             if not isinstance(selection, list) or any(
-                not isinstance(item, str) or item not in CHECK_LABELS
-                for item in selection
+                not isinstance(item, str) or item not in labels for item in selection
             ):
-                raise ValueError("Invalid OpenRouter detection items")
-            comparison_mode = tuple(key for key in CHECK_LABELS if key in selection)
+                raise ValueError("Invalid provider detection items")
+            comparison_mode = tuple(key for key in labels if key in selection)
         else:
             mode = entry.get("comparison_mode", "模型 ID 和属性")
             if mode not in ("仅模型 ID", "模型 ID 和属性"):
@@ -320,6 +365,7 @@ class WatchSpec:
             ignored_paths=ignored,
             comparison_mode=comparison_mode,
             is_openrouter=is_openrouter,
+            is_deepseek=is_deepseek,
             fingerprint=fingerprint,
         )
 
@@ -431,8 +477,9 @@ def compare_catalogs(
     previous: dict[str, Any],
     current: dict[str, Any],
     ignored_paths: tuple[str, ...],
-    checks: tuple[str, ...] = tuple(CHECK_LABELS),
+    checks: tuple[str, ...] | None = None,
     openrouter: bool = False,
+    deepseek: bool = False,
 ) -> dict[str, Any]:
     """Compare catalog membership and nested attributes without mutating snapshots.
 
@@ -440,12 +487,15 @@ def compare_catalogs(
         previous: Last successfully fetched raw catalog.
         current: Newly fetched raw catalog.
         ignored_paths: Model-relative paths to omit from both sides.
-        checks: OR categories, or membership/all attributes for other providers.
+        checks: Selected categories; None compares all available categories.
         openrouter: Whether to apply OR categories, field semantics, and schedules.
+        deepseek: Whether to apply DeepSeek categories and list semantics.
 
     Returns:
         Added and removed IDs plus changed fields with explicit value presence.
     """
+    if checks is None:
+        checks = tuple(DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS)
     result: dict[str, Any] = {
         "added": sorted(current.keys() - previous.keys())
         if "membership" in checks
@@ -457,6 +507,7 @@ def compare_catalogs(
     }
     if not (set(checks) - {"membership"}) or "$" in ignored_paths:
         return result
+    groups = DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
     for model_id in sorted(previous.keys() & current.keys()):
         before, after = (
             copy.deepcopy(value)
@@ -466,21 +517,21 @@ def compare_catalogs(
         )
         for value in (before, after):
             # Keep categories disjoint, including shared parents such as architecture.
-            nodes = [("", value)] if openrouter else []
+            nodes = [("", value)] if openrouter or deepseek else []
             while nodes:
                 parent_path, node = nodes.pop()
                 if not isinstance(node, dict):
                     continue
                 for key in list(node):
                     path = f"{parent_path}.{key}" if parent_path else key
-                    group = ATTRIBUTE_GROUPS.get(path)
+                    group = groups.get(path)
                     if group:
                         if group not in checks:
                             node.pop(key)
                         continue
                     descendants = [
                         group
-                        for prefix, group in ATTRIBUTE_GROUPS.items()
+                        for prefix, group in groups.items()
                         if prefix.startswith(path + ".")
                     ]
                     if descendants and isinstance(node[key], dict):
@@ -490,13 +541,18 @@ def compare_catalogs(
                     ):
                         node.pop(key)
             # Empty shared containers carry no selected attributes.
-            if openrouter and isinstance(value, dict):
-                for parent in ("architecture", "top_provider", "alias_target"):
+            if (openrouter or deepseek) and isinstance(value, dict):
+                shared_parents = (
+                    ("effort",)
+                    if deepseek
+                    else ("architecture", "top_provider", "alias_target")
+                )
+                for parent in shared_parents:
                     if value.get(parent) == {} and (
                         "metadata" not in checks
                         or any(
                             group not in checks
-                            for prefix, group in ATTRIBUTE_GROUPS.items()
+                            for prefix, group in groups.items()
                             if prefix.startswith(parent + ".")
                         )
                     ):
@@ -571,8 +627,8 @@ def compare_catalogs(
                     else:
                         stack.append((field, old[key], new[key]))
             elif not (
-                attribute_equal(path, old, new)
-                if openrouter
+                attribute_equal(path, old, new, deepseek=deepseek)
+                if openrouter or deepseek
                 else json.dumps(old, sort_keys=True, ensure_ascii=False)
                 == json.dumps(new, sort_keys=True, ensure_ascii=False)
             ):

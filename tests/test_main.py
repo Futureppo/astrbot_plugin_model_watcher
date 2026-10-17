@@ -393,15 +393,22 @@ async def test_mode_switch_discards_old_notices_without_resetting_snapshot(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "template,setting,category",
+    [
+        ("openrouter", "comparison_mode", "pricing"),
+        ("deepseek", "detection_items", "provider"),
+    ],
+)
 async def test_empty_selection_clears_backlog_and_continues_refreshing(
-    watcher_factory, monkeypatch
+    watcher_factory, monkeypatch, template, setting, category
 ):
     plugin = await watcher_factory(
         entries=[
             {
                 "entry_id": "one",
-                "__template_key": "openrouter",
-                "base_url": "https://openrouter.ai/api",
+                "__template_key": template,
+                "base_url": "https://example.test",
                 "umo_whitelist": ["bot:GroupMessage:1"],
             }
         ]
@@ -409,7 +416,7 @@ async def test_empty_selection_clears_backlog_and_continues_refreshing(
     state = plugin._state["entries"]["one"]
     state["snapshot"] = {"m": {"pricing": {"prompt": "1"}}}
     state["pending"] = [{"text": "Old notice", "targets": ["bot:GroupMessage:1"]}]
-    entry = {**plugin.config["providers"][0], "comparison_mode": []}
+    entry = {**plugin.config["providers"][0], setting: []}
     reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
     assert reloaded._state["entries"]["one"]["pending"] == []
     reloaded._clients["one"] = AsyncMock()
@@ -418,7 +425,7 @@ async def test_empty_selection_clears_backlog_and_continues_refreshing(
     await reloaded._run_cycle(reloaded._specs[0])
     assert reloaded._state["entries"]["one"]["snapshot"] == current
     reloaded.context.send_message.assert_not_called()
-    entry["comparison_mode"] = ["membership", "pricing"]
+    entry[setting] = ["membership", category]
     resumed = await watcher_factory(entries=[entry], stored=reloaded._state)
     resumed._clients["one"] = AsyncMock()
     await resumed._run_cycle(resumed._specs[0])

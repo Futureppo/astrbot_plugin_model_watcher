@@ -10,6 +10,7 @@ import pytest
 
 from data.plugins.astrbot_plugin_model_watcher.catalog import (
     CHECK_LABELS,
+    DEEPSEEK_CHECK_LABELS,
     WatchSpec,
     compare_catalogs,
     fetch_catalog,
@@ -377,12 +378,24 @@ def test_all_provider_templates_and_defaults():
             "vertex": "publisherModels",
         }.get(key, "data")
         assert spec.interval == 30 and spec.targets == ()
-        mode = template["items"]["comparison_mode"]
+        mode = template["items"][
+            "detection_items" if key == "deepseek" else "comparison_mode"
+        ]
         if key == "openrouter":
             assert spec.comparison_mode == ("membership",)
             assert mode["type"] == "list"
             assert mode["options"] == list(CHECK_LABELS)
             assert mode["labels"] == list(CHECK_LABELS.values())
+        elif key == "deepseek":
+            assert spec.is_deepseek and not spec.is_openrouter
+            assert spec.comparison_mode == tuple(
+                key for key in DEEPSEEK_CHECK_LABELS if key != "metadata"
+            )
+            assert mode["type"] == "list"
+            assert mode["default"] == list(spec.comparison_mode)
+            assert mode["options"] == list(DEEPSEEK_CHECK_LABELS)
+            assert mode["labels"] == list(DEEPSEEK_CHECK_LABELS.values())
+            assert "comparison_mode" not in template["items"]
         else:
             assert spec.comparison_mode == tuple(CHECK_LABELS)
             assert mode["type"] == "string"

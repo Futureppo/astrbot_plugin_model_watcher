@@ -75,7 +75,7 @@ class ModelWatcher(star.Star):
                 continue
             saved_mode = (
                 list(spec.comparison_mode)
-                if spec.is_openrouter
+                if spec.is_openrouter or spec.is_deepseek
                 else entry.get("comparison_mode", "模型 ID 和属性")
             )
             if str(entry.get("interval_seconds", 30)) != str(spec.interval):
@@ -102,14 +102,14 @@ class ModelWatcher(star.Star):
                 state.get("comparison_mode") != saved_mode
                 or not spec.comparison_mode
                 or (
-                    spec.is_openrouter
+                    (spec.is_openrouter or spec.is_deepseek)
                     and set(state.get("ignored_paths", spec.ignored_paths))
                     != set(spec.ignored_paths)
                 )
             ):
                 state["pending"] = []
             state["comparison_mode"] = saved_mode
-            if spec.is_openrouter:
+            if spec.is_openrouter or spec.is_deepseek:
                 state["ignored_paths"] = list(spec.ignored_paths)
             else:
                 state.pop("ignored_paths", None)
@@ -203,6 +203,7 @@ class ModelWatcher(star.Star):
                         spec.ignored_paths,
                         checks=spec.comparison_mode,
                         openrouter=spec.is_openrouter,
+                        deepseek=spec.is_deepseek,
                     )
                     if changes["added"] or changes["removed"] or changes["changed"]:
                         zone_name = str(
@@ -218,6 +219,7 @@ class ModelWatcher(star.Star):
                             detected_at = datetime.now().astimezone()
                         notice = {
                             "openrouter": spec.is_openrouter,
+                            "deepseek": spec.is_deepseek,
                             "name": spec.name,
                             "base_url": spec.base_url,
                             "time": detected_at.strftime("%Y-%m-%d %H:%M:%S %z"),

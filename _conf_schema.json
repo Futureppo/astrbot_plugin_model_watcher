@@ -481,15 +481,42 @@
             "_special": "select_umos",
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
-          "comparison_mode": {
-            "description": "检查内容",
-            "type": "string",
-            "default": "模型 ID 和属性",
-            "options": [
-              "仅模型 ID",
-              "模型 ID 和属性"
+          "detection_items": {
+            "description": "检查内容（可多选）",
+            "type": "list",
+            "default": [
+              "membership",
+              "name",
+              "provider",
+              "context",
+              "modalities",
+              "reasoning",
+              "api_capabilities"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
+            "items": {
+              "type": "string"
+            },
+            "options": [
+              "membership",
+              "name",
+              "provider",
+              "context",
+              "modalities",
+              "reasoning",
+              "api_capabilities",
+              "metadata"
+            ],
+            "labels": [
+              "模型新增、下架",
+              "模型名称",
+              "提供商",
+              "上下文与输出长度",
+              "输入、输出类型",
+              "推理档位与默认配置",
+              "API 能力与限制",
+              "其他元数据（高级）"
+            ],
+            "hint": "可组合检测模型新增/下架、名称、提供商、上下文与输出长度、输入输出类型、推理档位、API 能力。提供商对应 owned_by；其他元数据默认不选。全部取消则暂停变化通知，继续更新快照。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -498,7 +525,7 @@
             "items": {
               "type": "string"
             },
-            "hint": "选择“模型 ID 和属性”时生效。每项填写模型内路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+            "hint": "在已选检查内容中排除指定属性，例如 owned_by、effort.default_level、api_capabilities。$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。"
           }
         }
       },
@@ -1450,7 +1477,7 @@
       },
       "vertex": {
         "name": "Vertex AI / Model Garden",
-        "hint": "监控所有厂商的 Model Garden 目录及模型版本；打开服务账号 JSON 文件，将完整内容粘贴到 API Key，插件自动获取和刷新访问令牌。",
+        "hint": "监控所有厂商的 Model Garden 目录及模型版本。",
         "display_item": "name",
         "items": {
           "entry_id": {

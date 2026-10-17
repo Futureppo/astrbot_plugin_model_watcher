@@ -12,7 +12,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from .catalog import ATTRIBUTE_GROUPS, CHECK_LABELS, SET_PATHS
+from .catalog import (
+    ATTRIBUTE_GROUPS,
+    CHECK_LABELS,
+    DEEPSEEK_ATTRIBUTE_GROUPS,
+    DEEPSEEK_CHECK_LABELS,
+    DEEPSEEK_SET_PATHS,
+    SET_PATHS,
+)
 
 WIDTH = 1200
 BODY_WIDTH = WIDTH - 128
@@ -62,6 +69,10 @@ def format_notification(notification: dict[str, Any]) -> str:
         Wrapped text containing every change and all old/new values.
     """
     changes = notification["changes"]
+    deepseek = notification.get("deepseek", False)
+    groups = DEEPSEEK_ATTRIBUTE_GROUPS if deepseek else ATTRIBUTE_GROUPS
+    labels = DEEPSEEK_CHECK_LABELS if deepseek else CHECK_LABELS
+    set_paths = DEEPSEEK_SET_PATHS if deepseek else SET_PATHS
     lines = [
         f"条目名称：{notification['name']}",
         f"网址：{notification.get('base_url') or '（未填写基础 API）'}",
@@ -91,24 +102,29 @@ def format_notification(notification: dict[str, Any]) -> str:
                     else "（不存在）"
                 )
                 path = field["path"]
-                if not notification.get("openrouter", False):
+                if not (notification.get("openrouter", False) or deepseek):
                     lines.append(f"  {path}：{old} → {new}")
                     continue
                 group = next(
                     (
                         group
-                        for prefix, group in ATTRIBUTE_GROUPS.items()
+                        for prefix, group in groups.items()
                         if path == prefix or path.startswith(prefix + ".")
                     ),
                     "metadata",
                 )
-                title = {
-                    "architecture": "输入输出类型与架构",
-                    "top_provider": "主要供应商配置",
-                    "alias_target": "模型别名指向",
-                }.get(path, CHECK_LABELS[group])
+                titles = (
+                    {"effort": "推理档位与默认配置"}
+                    if deepseek
+                    else {
+                        "architecture": "输入输出类型与架构",
+                        "top_provider": "主要供应商配置",
+                        "alias_target": "模型别名指向",
+                    }
+                )
+                title = titles.get(path, labels[group])
                 label = f"{title} · {path}"
-                if path in SET_PATHS and all(
+                if path in set_paths and all(
                     isinstance(field[side], list)
                     and all(isinstance(item, str) for item in field[side])
                     for side in ("old", "new")

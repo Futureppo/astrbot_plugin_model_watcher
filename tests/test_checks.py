@@ -11,6 +11,131 @@ from data.plugins.astrbot_plugin_model_watcher.catalog import (
 from data.plugins.astrbot_plugin_model_watcher.renderer import format_notification
 
 
+def test_deepseek_selected_fields_and_provider_notifications():
+    spec = WatchSpec.from_entry(
+        {
+            "entry_id": "deepseek",
+            "__template_key": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "detection_items": [
+                "provider",
+                "modalities",
+                "reasoning",
+                "api_capabilities",
+            ],
+        }
+    )
+    before = {
+        "id": "deepseek-flash",
+        "object": "model",
+        "owned_by": "deepseek",
+        "name": "DeepSeek-V4.1-Flash",
+        "context_window": 1048576,
+        "max_output_tokens": 393216,
+        "input_modalities": ["text", "image"],
+        "output_modalities": ["text"],
+        "effort": {
+            "supported_levels": ["low", "high", "max"],
+            "default_level": "high",
+        },
+        "api_capabilities": {
+            "anthropic_messages": {"system_prompt_update": "in-history"}
+        },
+    }
+    reordered = copy.deepcopy(before)
+    reordered["input_modalities"] = ["image", "text", "image"]
+    reordered["effort"]["supported_levels"] = ["max", "low", "high", "max"]
+    assert not compare_catalogs(
+        {"m": before}, {"m": reordered}, (), checks=spec.comparison_mode, deepseek=True
+    )["changed"]
+    after = copy.deepcopy(reordered)
+    after.update(
+        owned_by="new-provider",
+        name="New name",
+        context_window=2097152,
+        input_modalities=["text"],
+    )
+    after["effort"]["default_level"] = "max"
+    after["api_capabilities"]["anthropic_messages"]["system_prompt_update"] = (
+        "leading-only"
+    )
+    changes = compare_catalogs(
+        {"m": before, "gone": {}},
+        {"m": after, "added": {}},
+        (),
+        checks=spec.comparison_mode,
+        deepseek=spec.is_deepseek,
+    )
+    assert changes["added"] == changes["removed"] == []
+    assert {field["path"] for field in changes["changed"]["m"]} == {
+        "owned_by",
+        "input_modalities",
+        "effort.default_level",
+        "api_capabilities.anthropic_messages.system_prompt_update",
+    }
+    text = format_notification(
+        {
+            "name": "DeepSeek",
+            "time": "now",
+            "count": 2,
+            "changes": changes,
+            "deepseek": True,
+        }
+    )
+    assert "提供商 · owned_by" in text and '"new-provider"' in text
+    assert '移除 ["image"]' in text
+    without_provider = copy.deepcopy(after)
+    without_provider.pop("owned_by")
+    removed = compare_catalogs(
+        {"m": after}, {"m": without_provider}, (), checks=("provider",), deepseek=True
+    )
+    assert removed["changed"]["m"][0]["new_exists"] is False
+    added = compare_catalogs(
+        {"m": without_provider}, {"m": after}, (), checks=("provider",), deepseek=True
+    )
+    text = format_notification(
+        {
+            "name": "DeepSeek",
+            "time": "now",
+            "count": 1,
+            "changes": added,
+            "deepseek": True,
+        }
+    )
+    assert "提供商 · owned_by（信息补全）" in text
+    assert not compare_catalogs(
+        {"m": before}, {"m": after}, ("owned_by",), checks=("provider",), deepseek=True
+    )["changed"]
+
+
+def test_deepseek_metadata_excludes_known_fields_and_or_semantics():
+    before = {
+        "name": "old",
+        "owned_by": "old-provider",
+        "object": "model",
+        "effort": {"default_level": "high", "extra": 1},
+        "pricing": {"prompt": "1.0"},
+        "supported_parameters": ["tools", "temperature"],
+    }
+    after = {
+        "name": "new",
+        "owned_by": "new-provider",
+        "object": "other",
+        "effort": {"default_level": "max", "extra": 2},
+        "pricing": {"prompt": "1.00"},
+        "supported_parameters": ["temperature", "tools"],
+    }
+    changes = compare_catalogs(
+        {"m": before}, {"m": after}, (), checks=("metadata",), deepseek=True
+    )
+    assert {field["path"] for field in changes["changed"]["m"]} == {
+        "object",
+        "effort.extra",
+        "pricing.prompt",
+        "supported_parameters",
+    }
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [
