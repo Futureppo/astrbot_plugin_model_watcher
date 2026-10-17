@@ -173,35 +173,6 @@ async def test_http_failure_logs_entry_and_reason_without_changing_baseline(
 
 
 @pytest.mark.asyncio
-async def test_legacy_pages_merge_only_unsent_content_and_keep_targets(
-    watcher_factory, monkeypatch
-):
-    plugin = await watcher_factory()
-    spec = plugin._specs[0]
-    state = plugin._state["entries"]["one"]
-    state["pending"] = [
-        {
-            "pages": ["first", "second", "third"],
-            "targets": {spec.targets[0]: 1, spec.targets[1]: 0},
-        }
-    ]
-    entry = dict(
-        plugin.config["providers"][0],
-        umo_whitelist=[spec.targets[0], "bot:GroupMessage:new"],
-    )
-    reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
-    notice = reloaded._state["entries"]["one"]["pending"][0]
-    assert notice["targets"] == [spec.targets[0]]
-    assert notice["text"] == "second\n\nthird"
-    await reloaded._deliver(reloaded._specs[0])
-    assert reloaded.context.send_message.await_count == 1
-    assert all(
-        call.args[0] == spec.targets[0]
-        for call in reloaded.context.send_message.call_args_list
-    )
-
-
-@pytest.mark.asyncio
 async def test_reconfigure_identity_and_empty_whitelist(watcher_factory, monkeypatch):
     plugin = await watcher_factory(
         entries=[{"entry_id": "one", "base_url": "https://example.test"}]
@@ -351,47 +322,12 @@ async def test_slow_provider_does_not_block_another(watcher_factory, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_openrouter_upgrade_clears_backlog_and_keeps_baseline(
-    watcher_factory, monkeypatch
-):
-    entry = {
-        "entry_id": "or",
-        "__template_key": "openrouter",
-        "name": "Renamed",
-        "base_url": "https://openrouter.ai/api",
-        "umo_whitelist": ["bot:GroupMessage:1"],
-    }
-    plugin = await watcher_factory(entries=[entry])
-    state = plugin._state["entries"]["or"]
-    state.pop("comparison_mode")
-    state["snapshot"] = {"a": {"id": "a", "pricing": {"prompt": "1"}}}
-    state["pending"] = [
-        {"pages": ["old attribute change"] * 10, "targets": {"bot:GroupMessage:1": 0}}
-        for _ in range(20)
-    ]
-    reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
-    assert reloaded._state["entries"]["or"]["snapshot"] == state["snapshot"]
-    assert reloaded._state["entries"]["or"]["pending"] == []
-    assert reloaded.put_kv_data.call_args.args[1]["entries"]["or"]["pending"] == []
-    reloaded._clients["or"] = AsyncMock()
-    new = {"a": {"id": "a", "pricing": {"prompt": "2"}}}
-    monkeypatch.setattr(main, "fetch_catalog", AsyncMock(return_value=new))
-    await reloaded._run_cycle(reloaded._specs[0])
-    reloaded.context.send_message.assert_not_called()
-    assert reloaded._state["entries"]["or"]["snapshot"] == new
-    monkeypatch.setattr(
-        main, "fetch_catalog", AsyncMock(return_value={**new, "b": {"id": "b"}})
-    )
-    await reloaded._run_cycle(reloaded._specs[0])
-    reloaded.context.send_message.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 async def test_openrouter_new_failed_delivery_survives_restart(
     watcher_factory, monkeypatch
 ):
     entry = {
         "entry_id": "or",
+        "__template_key": "openrouter",
         "base_url": "https://openrouter.ai/api",
         "umo_whitelist": ["bot:GroupMessage:1"],
     }
@@ -416,7 +352,7 @@ async def test_openrouter_new_failed_delivery_survives_restart(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode,expected", [("仅模型 ID", 0), ("模型 ID 和属性", 1)])
+@pytest.mark.parametrize("mode,expected", [(["membership"], 0), (["pricing"], 1)])
 async def test_explicit_comparison_mode_controls_attribute_notifications(
     watcher_factory, monkeypatch, mode, expected
 ):
@@ -424,6 +360,7 @@ async def test_explicit_comparison_mode_controls_attribute_notifications(
         entries=[
             {
                 "entry_id": "or",
+                "__template_key": "openrouter",
                 "base_url": "https://openrouter.ai/api",
                 "comparison_mode": mode,
                 "umo_whitelist": ["bot:GroupMessage:1"],
@@ -453,6 +390,105 @@ async def test_mode_switch_discards_old_notices_without_resetting_snapshot(
     reloaded = await watcher_factory(entries=entries, stored=plugin._state)
     assert reloaded._state["entries"]["one"]["snapshot"] == {"a": "a"}
     assert reloaded._state["entries"]["one"]["pending"] == []
+
+
+@pytest.mark.asyncio
+async def test_empty_selection_clears_backlog_and_continues_refreshing(
+    watcher_factory, monkeypatch
+):
+    plugin = await watcher_factory(
+        entries=[
+            {
+                "entry_id": "one",
+                "__template_key": "openrouter",
+                "base_url": "https://openrouter.ai/api",
+                "umo_whitelist": ["bot:GroupMessage:1"],
+            }
+        ]
+    )
+    state = plugin._state["entries"]["one"]
+    state["snapshot"] = {"m": {"pricing": {"prompt": "1"}}}
+    state["pending"] = [{"text": "Old notice", "targets": ["bot:GroupMessage:1"]}]
+    entry = {**plugin.config["providers"][0], "comparison_mode": []}
+    reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
+    assert reloaded._state["entries"]["one"]["pending"] == []
+    reloaded._clients["one"] = AsyncMock()
+    current = {"new": {"pricing": {"prompt": "2"}}}
+    monkeypatch.setattr(main, "fetch_catalog", AsyncMock(return_value=current))
+    await reloaded._run_cycle(reloaded._specs[0])
+    assert reloaded._state["entries"]["one"]["snapshot"] == current
+    reloaded.context.send_message.assert_not_called()
+    entry["comparison_mode"] = ["membership", "pricing"]
+    resumed = await watcher_factory(entries=[entry], stored=reloaded._state)
+    resumed._clients["one"] = AsyncMock()
+    await resumed._run_cycle(resumed._specs[0])
+    resumed.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_selection_order_and_duplicates_preserve_pending_deliveries(
+    watcher_factory,
+):
+    entry = {
+        "entry_id": "one",
+        "__template_key": "openrouter",
+        "base_url": "https://openrouter.ai/api",
+        "comparison_mode": ["membership", "pricing"],
+        "umo_whitelist": ["bot:GroupMessage:1"],
+    }
+    plugin = await watcher_factory(entries=[entry])
+    plugin._state["entries"]["one"]["pending"] = [
+        {"text": "Unsent", "targets": ["bot:GroupMessage:1"]}
+    ]
+    entry["comparison_mode"] = ["pricing", "membership", "pricing"]
+    reloaded = await watcher_factory(entries=[entry], stored=plugin._state)
+    assert (
+        reloaded._state["entries"]["one"]["pending"]
+        == plugin._state["entries"]["one"]["pending"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_multiple_selected_changes_share_one_notice(watcher_factory, monkeypatch):
+    entry = {
+        "entry_id": "one",
+        "__template_key": "openrouter",
+        "base_url": "https://openrouter.ai/api",
+        "comparison_mode": ["membership", "pricing", "lifecycle"],
+        "umo_whitelist": ["bot:GroupMessage:1"],
+    }
+    plugin = await watcher_factory(entries=[entry])
+    plugin._clients["one"] = AsyncMock()
+    plugin._state["entries"]["one"]["snapshot"] = {
+        "m": {
+            "pricing": {"prompt": "1"},
+            "expiration_date": None,
+            "description": "old description",
+        }
+    }
+    monkeypatch.setattr(
+        main,
+        "fetch_catalog",
+        AsyncMock(
+            return_value={
+                "new-model": {},
+                "m": {
+                    "pricing": {"prompt": "2"},
+                    "expiration_date": "2027-01-01",
+                    "description": "new description",
+                },
+            }
+        ),
+    )
+    render = Mock(return_value=b"image")
+    monkeypatch.setattr(main, "render_card", render)
+    await plugin._run_cycle(plugin._specs[0])
+    plugin.context.send_message.assert_awaited_once()
+    text = render.call_args.args[0]
+    assert (
+        "new-model" in text and "pricing.prompt" in text and "expiration_date" in text
+    )
+    assert "description" not in text
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from .catalog import ATTRIBUTE_GROUPS, CHECK_LABELS, SET_PATHS
+
 WIDTH = 1200
 BODY_WIDTH = WIDTH - 128
 MAX_IMAGE_PIXELS = 40_000_000
@@ -88,7 +90,50 @@ def format_notification(notification: dict[str, Any]) -> str:
                     if field["new_exists"]
                     else "（不存在）"
                 )
-                lines.append(f"  {field['path']}：{old} → {new}")
+                path = field["path"]
+                if not notification.get("openrouter", False):
+                    lines.append(f"  {path}：{old} → {new}")
+                    continue
+                group = next(
+                    (
+                        group
+                        for prefix, group in ATTRIBUTE_GROUPS.items()
+                        if path == prefix or path.startswith(prefix + ".")
+                    ),
+                    "metadata",
+                )
+                title = {
+                    "architecture": "输入输出类型与架构",
+                    "top_provider": "主要供应商配置",
+                    "alias_target": "模型别名指向",
+                }.get(path, CHECK_LABELS[group])
+                label = f"{title} · {path}"
+                if path in SET_PATHS and all(
+                    isinstance(field[side], list)
+                    and all(isinstance(item, str) for item in field[side])
+                    for side in ("old", "new")
+                ):
+                    added = sorted(set(field["new"]) - set(field["old"]))
+                    removed = sorted(set(field["old"]) - set(field["new"]))
+                    details = []
+                    if added:
+                        details.append("新增 " + json.dumps(added, ensure_ascii=False))
+                    if removed:
+                        details.append(
+                            "移除 " + json.dumps(removed, ensure_ascii=False)
+                        )
+                    lines.append(f"  {label}：{'；'.join(details)}")
+                else:
+                    note = (
+                        "（信息补全）"
+                        if (
+                            (not field["old_exists"] or field["old"] is None)
+                            and field["new_exists"]
+                            and field["new"] is not None
+                        )
+                        else ""
+                    )
+                    lines.append(f"  {label}{note}：{old} → {new}")
             lines.append("")
     try:
         font = load_font(24)

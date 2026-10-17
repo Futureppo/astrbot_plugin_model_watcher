@@ -9,6 +9,7 @@ import json
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
@@ -16,6 +17,100 @@ import httpx
 from astrbot.core.platform.message_session import MessageSession
 
 _PRIVATE_REQUEST = ContextVar("model_watcher_private_request", default=False)
+
+CHECK_LABELS = {
+    "membership": "模型新增、下架",
+    "pricing": "价格与计费规则",
+    "context": "上下文与输出长度",
+    "modalities": "输入、输出类型",
+    "parameters": "工具调用与支持参数",
+    "reasoning": "推理能力与默认配置",
+    "voices": "语音音色",
+    "lifecycle": "停用日期",
+    "aliases": "模型别名指向",
+    "metadata": "其他元数据（高级）",
+    "benchmarks": "评分与排行榜",
+}
+ATTRIBUTE_GROUPS = {
+    "pricing": "pricing",
+    "context_length": "context",
+    "top_provider.context_length": "context",
+    "top_provider.max_completion_tokens": "context",
+    "per_request_limits": "context",
+    "architecture.modality": "modalities",
+    "architecture.input_modalities": "modalities",
+    "architecture.output_modalities": "modalities",
+    "supported_parameters": "parameters",
+    "reasoning": "reasoning",
+    "default_parameters": "reasoning",
+    "supported_voices": "voices",
+    "expiration_date": "lifecycle",
+    "alias_target.slug": "aliases",
+    "canonical_slug": "aliases",
+    "benchmarks": "benchmarks",
+}
+SET_PATHS = {
+    "architecture.input_modalities",
+    "architecture.output_modalities",
+    "supported_parameters",
+    "supported_voices",
+    "reasoning.supported_efforts",
+}
+PRICE_KEYS = {
+    "prompt",
+    "completion",
+    "request",
+    "image",
+    "image_token",
+    "image_output",
+    "audio",
+    "audio_output",
+    "input_audio_cache",
+    "web_search",
+    "internal_reasoning",
+    "input_cache_read",
+    "input_cache_write",
+    "input_cache_write_1h",
+    "discount",
+}
+
+
+def attribute_equal(path: str, before: Any, after: Any) -> bool:
+    """Compare catalog values with field-specific numeric and set semantics.
+
+    Args:
+        path: Model-relative attribute path, including any array indexes.
+        before: Previous JSON value.
+        after: Current JSON value.
+
+    Returns:
+        Whether the values are equivalent, retaining unknown array ordering,
+        pricing override precedence, and distinctions between null and zero.
+    """
+    if isinstance(before, dict) and isinstance(after, dict):
+        return before.keys() == after.keys() and all(
+            attribute_equal(f"{path}.{key}", before[key], after[key]) for key in before
+        )
+    if isinstance(before, list) and isinstance(after, list):
+        if path in SET_PATHS or (
+            path.startswith("pricing.overrides.") and path.endswith(".utc_days")
+        ):
+            return {json.dumps(item, sort_keys=True) for item in before} == {
+                json.dumps(item, sort_keys=True) for item in after
+            }
+        return len(before) == len(after) and all(
+            attribute_equal(f"{path}.{index}", old, new)
+            for index, (old, new) in enumerate(zip(before, after))
+        )
+    if path.startswith("pricing.") and path.rsplit(".", 1)[-1] in PRICE_KEYS:
+        if all(type(value) in (str, int, float) for value in (before, after)):
+            try:
+                old_price, new_price = Decimal(str(before)), Decimal(str(after))
+                if old_price.is_finite() and new_price.is_finite():
+                    return old_price == new_price
+            except InvalidOperation:
+                pass
+    return json.dumps(before, sort_keys=True) == json.dumps(after, sort_keys=True)
 
 
 class RequestLogFilter(logging.Filter):
@@ -78,7 +173,8 @@ class WatchSpec:
     proxy: str | None
     targets: tuple[str, ...]
     ignored_paths: tuple[str, ...]
-    comparison_mode: str
+    comparison_mode: tuple[str, ...]
+    is_openrouter: bool
     fingerprint: str
 
     @classmethod
@@ -131,15 +227,30 @@ class WatchSpec:
                     raise ValueError("An absolute proxy URL is required")
         except httpx.InvalidURL as exc:
             raise ValueError("Invalid API or proxy URL") from exc
-        is_openrouter = (
-            entry.get("__template_key") == "openrouter"
-            or parsed.host == "openrouter.ai"
-        )
-        comparison_mode = entry.get("comparison_mode") or (
-            "仅模型 ID" if is_openrouter else "模型 ID 和属性"
-        )
-        if comparison_mode not in {"仅模型 ID", "模型 ID 和属性"}:
-            raise ValueError("Invalid comparison mode")
+        is_openrouter = entry.get("__template_key") == "openrouter"
+        if (
+            (is_openrouter or parsed.host == "openrouter.ai")
+            and api_type == "openai"
+            and parsed.path.rstrip("/").endswith("/v1/models")
+            and "output_modalities" not in parsed.params
+        ):
+            # OpenRouter otherwise defaults to models that produce text output.
+            parsed = parsed.copy_set_param("output_modalities", "all")
+        if is_openrouter:
+            selection = entry.get("comparison_mode", ["membership"])
+            if not isinstance(selection, list) or any(
+                not isinstance(item, str) or item not in CHECK_LABELS
+                for item in selection
+            ):
+                raise ValueError("Invalid OpenRouter detection items")
+            comparison_mode = tuple(key for key in CHECK_LABELS if key in selection)
+        else:
+            mode = entry.get("comparison_mode", "模型 ID 和属性")
+            if mode not in ("仅模型 ID", "模型 ID 和属性"):
+                raise ValueError("Invalid comparison mode")
+            comparison_mode = (
+                ("membership",) if mode == "仅模型 ID" else tuple(CHECK_LABELS)
+            )
         raw_interval = entry.get("interval_seconds", 30)
         try:
             interval = int(raw_interval)
@@ -208,6 +319,7 @@ class WatchSpec:
             targets=tuple(targets),
             ignored_paths=ignored,
             comparison_mode=comparison_mode,
+            is_openrouter=is_openrouter,
             fingerprint=fingerprint,
         )
 
@@ -319,7 +431,8 @@ def compare_catalogs(
     previous: dict[str, Any],
     current: dict[str, Any],
     ignored_paths: tuple[str, ...],
-    compare_attributes: bool = True,
+    checks: tuple[str, ...] = tuple(CHECK_LABELS),
+    openrouter: bool = False,
 ) -> dict[str, Any]:
     """Compare catalog membership and nested attributes without mutating snapshots.
 
@@ -327,24 +440,67 @@ def compare_catalogs(
         previous: Last successfully fetched raw catalog.
         current: Newly fetched raw catalog.
         ignored_paths: Model-relative paths to omit from both sides.
-        compare_attributes: Whether to compare properties of existing model IDs.
+        checks: OR categories, or membership/all attributes for other providers.
+        openrouter: Whether to apply OR categories, field semantics, and schedules.
 
     Returns:
         Added and removed IDs plus changed fields with explicit value presence.
     """
     result: dict[str, Any] = {
-        "added": sorted(current.keys() - previous.keys()),
-        "removed": sorted(previous.keys() - current.keys()),
+        "added": sorted(current.keys() - previous.keys())
+        if "membership" in checks
+        else [],
+        "removed": sorted(previous.keys() - current.keys())
+        if "membership" in checks
+        else [],
         "changed": {},
     }
-    if not compare_attributes or "$" in ignored_paths:
+    if not (set(checks) - {"membership"}) or "$" in ignored_paths:
         return result
     for model_id in sorted(previous.keys() & current.keys()):
         before, after = (
-            copy.deepcopy(previous[model_id]),
-            copy.deepcopy(current[model_id]),
+            copy.deepcopy(value)
+            if isinstance(value, dict) or "metadata" in checks
+            else {}
+            for value in (previous[model_id], current[model_id])
         )
         for value in (before, after):
+            # Keep categories disjoint, including shared parents such as architecture.
+            nodes = [("", value)] if openrouter else []
+            while nodes:
+                parent_path, node = nodes.pop()
+                if not isinstance(node, dict):
+                    continue
+                for key in list(node):
+                    path = f"{parent_path}.{key}" if parent_path else key
+                    group = ATTRIBUTE_GROUPS.get(path)
+                    if group:
+                        if group not in checks:
+                            node.pop(key)
+                        continue
+                    descendants = [
+                        group
+                        for prefix, group in ATTRIBUTE_GROUPS.items()
+                        if prefix.startswith(path + ".")
+                    ]
+                    if descendants and isinstance(node[key], dict):
+                        nodes.append((path, node[key]))
+                    elif "metadata" not in checks and not any(
+                        group in checks for group in descendants
+                    ):
+                        node.pop(key)
+            # Empty shared containers carry no selected attributes.
+            if openrouter and isinstance(value, dict):
+                for parent in ("architecture", "top_provider", "alias_target"):
+                    if value.get(parent) == {} and (
+                        "metadata" not in checks
+                        or any(
+                            group not in checks
+                            for prefix, group in ATTRIBUTE_GROUPS.items()
+                            if prefix.startswith(parent + ".")
+                        )
+                    ):
+                        value.pop(parent)
             for path in ignored_paths:
                 if path == "$":
                     continue
@@ -360,6 +516,41 @@ def compare_catalogs(
                         parent[int(parts[-1])] = None
                 except (ValueError, IndexError):
                     continue
+        if openrouter and isinstance(before, dict) and isinstance(after, dict):
+            old_prices, new_prices = before.get("pricing"), after.get("pricing")
+            if isinstance(old_prices, dict) and isinstance(new_prices, dict):
+                rules = old_prices.get("overrides")
+                if (
+                    isinstance(rules, list)
+                    and rules
+                    and attribute_equal(
+                        "pricing.overrides", rules, new_prices.get("overrides")
+                    )
+                    and all(
+                        isinstance(rule, dict)
+                        and set(rule)
+                        <= PRICE_KEYS | {"utc_start", "utc_end", "utc_days"}
+                        and (
+                            "utc_days" in rule
+                            or {"utc_start", "utc_end"} <= rule.keys()
+                        )
+                        for rule in rules
+                    )
+                ):
+                    # OR publishes the complete schedule. Only suppress a rate when
+                    # both observed values occur in that unchanged schedule and every
+                    # window explicitly defines it; unknown conditions remain visible.
+                    for key in PRICE_KEYS & old_prices.keys() & new_prices.keys():
+                        if all(key in rule for rule in rules) and all(
+                            any(
+                                attribute_equal(
+                                    f"pricing.{key}", prices[key], rule[key]
+                                )
+                                for rule in rules
+                            )
+                            for prices in (old_prices, new_prices)
+                        ):
+                            new_prices[key] = copy.deepcopy(old_prices[key])
         changes = []
         stack = [("", before, after)]
         while stack:
@@ -379,8 +570,11 @@ def compare_catalogs(
                         )
                     else:
                         stack.append((field, old[key], new[key]))
-            elif json.dumps(old, sort_keys=True, ensure_ascii=False) != json.dumps(
-                new, sort_keys=True, ensure_ascii=False
+            elif not (
+                attribute_equal(path, old, new)
+                if openrouter
+                else json.dumps(old, sort_keys=True, ensure_ascii=False)
+                == json.dumps(new, sort_keys=True, ensure_ascii=False)
             ):
                 changes.append(
                     {

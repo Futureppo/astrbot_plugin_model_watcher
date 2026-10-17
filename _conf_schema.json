@@ -3,11 +3,11 @@
     "description": "提供商配置表",
     "type": "template_list",
     "default": [],
-    "hint": "点击“添加条目”选择模板。同一提供商可添加多次，各自设置轮询和推送目标；首次成功只保存基线。",
+    "hint": "点击“添加条目”选择模板。同一提供商可添加多次，各自设置轮询和推送目标。",
     "templates": {
       "openrouter": {
         "name": "OpenRouter",
-        "hint": "监控 OpenRouter 模型目录，可修改地址或添加多个账号。",
+        "hint": "默认监控 OpenRouter 全部渠道、全部模型类型。",
         "display_item": "name",
         "items": {
           "entry_id": {
@@ -36,7 +36,7 @@
             "description": "完整 API（优先）",
             "type": "string",
             "default": "",
-            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
+            "hint": "可填写非标准模型目录地址，不追加路径。标准 /v1/models 目录未指定 output_modalities 时自动补充 all，包含全部类型；显式筛选参数会保留。只支持 GET。"
           },
           "models_path": {
             "description": "模型列表路径",
@@ -54,7 +54,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://openrouter.ai/settings/keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -79,14 +79,41 @@
             "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
           },
           "comparison_mode": {
-            "description": "检查内容",
-            "type": "string",
-            "default": "仅模型 ID",
-            "options": [
-              "仅模型 ID",
-              "模型 ID 和属性"
+            "description": "检测项目（可多选）",
+            "type": "list",
+            "default": [
+              "membership"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "items": {
+              "type": "string"
+            },
+            "options": [
+              "membership",
+              "pricing",
+              "context",
+              "modalities",
+              "parameters",
+              "reasoning",
+              "voices",
+              "lifecycle",
+              "aliases",
+              "metadata",
+              "benchmarks"
+            ],
+            "labels": [
+              "模型新增、下架",
+              "价格与计费规则",
+              "上下文与输出长度",
+              "输入、输出类型",
+              "工具调用与支持参数",
+              "推理能力与默认配置",
+              "语音音色",
+              "停用日期",
+              "模型别名指向",
+              "其他元数据（高级）",
+              "评分与排行榜"
+            ],
+            "hint": "可同时选择多个项目，变化合并推送。全部取消则暂停变化通知。其他元数据只检测未归类字段；评分与排行榜默认不选。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -95,7 +122,7 @@
             "items": {
               "type": "string"
             },
-            "hint": "选择“模型 ID 和属性”时生效。每项填写模型内路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
+            "hint": "在已选检测项目中排除指定属性；例如 pricing、pricing.prompt。$ 忽略全部属性，仅在勾选模型新增、下架时推送目录增减。"
           }
         }
       },
@@ -148,7 +175,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://platform.openai.com/api-keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -180,7 +207,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -242,7 +269,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://console.x.ai/team/default/api-keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -274,7 +301,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -336,7 +363,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://platform.moonshot.cn/console/api-keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -368,7 +395,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -430,7 +457,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://platform.deepseek.com/api_keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -462,7 +489,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -524,7 +551,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://platform.moonshot.ai/console/api-keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -556,7 +583,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -618,7 +645,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://console.groq.com/keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -650,7 +677,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -712,7 +739,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://console.mistral.ai/home?profile_dialog=api-keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -744,7 +771,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -806,7 +833,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://cloud.cerebras.ai/platform"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -838,101 +865,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
-          },
-          "ignored_paths": {
-            "description": "忽略属性路径",
-            "type": "list",
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "hint": "选择“模型 ID 和属性”时生效。每项填写模型内路径，例如 pricing、pricing.prompt、updated_at；$ 忽略全部属性，仅比较新增和下架。"
-          }
-        }
-      },
-      "sambanova": {
-        "name": "SambaNova",
-        "hint": "公开目录当前可免密钥获取，也可填写 SambaNova API Key。",
-        "display_item": "name",
-        "items": {
-          "entry_id": {
-            "description": "内部条目 ID",
-            "type": "string",
-            "default": "",
-            "invisible": true
-          },
-          "name": {
-            "description": "条目名称",
-            "type": "string",
-            "default": "SambaNova"
-          },
-          "enabled": {
-            "description": "启用该条目",
-            "type": "bool",
-            "default": true
-          },
-          "base_url": {
-            "description": "基础 API",
-            "type": "string",
-            "default": "https://api.sambanova.ai",
-            "hint": "不含 /v1/models，例如 https://api.openai.com；末尾已有 /v1 时只补充 /models。"
-          },
-          "full_url": {
-            "description": "完整 API（优先）",
-            "type": "string",
-            "default": "",
-            "hint": "可填写非标准模型目录地址；填写后使用原地址，不追加路径。只支持 GET。"
-          },
-          "models_path": {
-            "description": "模型列表路径",
-            "type": "string",
-            "default": "",
-            "hint": "留空使用 data；例如 result.models。$ 表示 JSON 根数组，数字可访问数组索引。"
-          },
-          "id_path": {
-            "description": "模型 ID 路径",
-            "type": "string",
-            "default": "",
-            "hint": "留空使用 id；可填 name 或 details.id。字符串数组直接使用字符串作为 ID。"
-          },
-          "api_key": {
-            "description": "API Key",
-            "type": "string",
-            "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
-          },
-          "interval_seconds": {
-            "description": "更新间隔（秒）",
-            "type": "int",
-            "default": 30,
-            "hint": "正整数，默认 30 秒；每轮完成后等待此间隔，非法值按 30 秒处理。"
-          },
-          "proxy": {
-            "description": "代理地址",
-            "type": "string",
-            "default": "",
-            "hint": "留空直连，不读取系统代理；支持 http://、https://、socks5://、socks5h://。"
-          },
-          "umo_whitelist": {
-            "description": "推送 UMO 白名单",
-            "type": "list",
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "_special": "select_umos",
-            "hint": "支持多选群聊或私聊。空列表只监控不推送；未升级 WebUI 时可手动添加完整 UMO。"
-          },
-          "comparison_mode": {
-            "description": "检查内容",
-            "type": "string",
-            "default": "模型 ID 和属性",
-            "options": [
-              "仅模型 ID",
-              "模型 ID 和属性"
-            ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -994,7 +927,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://build.nvidia.com/settings/api-keys"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1026,7 +959,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1088,7 +1021,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://cloud.siliconflow.cn/me/account/ak"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1120,7 +1053,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1182,7 +1115,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://cloud.siliconflow.com/me/account/ak"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1214,7 +1147,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1276,7 +1209,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取 API Key：https://platform.stepfun.com/interface-key"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1308,7 +1241,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1370,7 +1303,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。"
+            "hint": "留空不认证；填写后发送 Authorization: Bearer <key>。 获取访问令牌：https://huggingface.co/settings/tokens"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1402,7 +1335,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1464,7 +1397,7 @@
             "description": "API Key",
             "type": "string",
             "default": "",
-            "hint": "填写 Google AI Studio API Key，使用 x-goog-api-key 认证。"
+            "hint": "填写 Google AI Studio API Key，使用 x-goog-api-key 认证。 获取 API Key：https://aistudio.google.com/apikey"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1496,7 +1429,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1564,7 +1497,7 @@
             "description": "API Key（服务账号 JSON）",
             "type": "text",
             "default": "",
-            "hint": "打开 Google Cloud 服务账号密钥 JSON，将包含 type、project_id、client_email、private_key 等字段的完整 JSON 粘贴到这里；不要只复制 private_key。自动识别凭证并刷新令牌。"
+            "hint": "打开 Google Cloud 服务账号密钥 JSON，将包含 type、project_id、client_email、private_key 等字段的完整 JSON 粘贴到这里；不要只复制 private_key。自动识别凭证并刷新令牌。 服务账号管理：https://console.cloud.google.com/iam-admin/serviceaccounts"
           },
           "interval_seconds": {
             "description": "更新间隔（秒）",
@@ -1596,7 +1529,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",
@@ -1696,7 +1629,7 @@
               "仅模型 ID",
               "模型 ID 和属性"
             ],
-            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较价格、上下文等字段。OpenRouter 默认仅检查 ID，避免动态属性频繁通知。切换后清理旧模式的待发通知，保留模型基线。"
+            "hint": "仅模型 ID 只推送新增和下架；模型 ID 和属性还会比较接口返回的全部属性。切换后清理旧模式的待发通知，保留模型基线。"
           },
           "ignored_paths": {
             "description": "忽略属性路径",

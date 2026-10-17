@@ -21,15 +21,17 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 
 进入插件配置，在“提供商配置表”点击“添加条目”，选择模板，填写 API Key 和推送目标后保存。同一模板可以添加多次，例如监控不同账号可见的模型。配置保存后 AstrBot 会重载插件。
 
+各内置提供商的 API Key 说明附有官网获取地址，复制到浏览器打开即可。国内站、国际站使用对应地址；Hugging Face 提供访问令牌地址，Vertex 提供服务账号管理地址。
+
 默认没有监控条目。新条目第一次成功请求只建立基线，不推送已有模型；以后才推送变化。插件不调用模型进行可用性测试。
 
 ## 提供商模板
 
-内置 17 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
+内置 16 个提供商/区域模板，以及 1 个自定义模板。同一模板可以重复添加。
 
 | 模板 | 默认基础 API | 实际请求地址 |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api` | `https://openrouter.ai/api/v1/models` |
+| OpenRouter | `https://openrouter.ai/api` | `https://openrouter.ai/api/v1/models?output_modalities=all` |
 | OpenAI | `https://api.openai.com` | `https://api.openai.com/v1/models` |
 | xAI | `https://api.x.ai` | `https://api.x.ai/v1/models` |
 | Kimi / Moonshot | `https://api.moonshot.cn` | `https://api.moonshot.cn/v1/models` |
@@ -38,7 +40,6 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 | Groq | `https://api.groq.com/openai` | `https://api.groq.com/openai/v1/models` |
 | Mistral AI | `https://api.mistral.ai` | `https://api.mistral.ai/v1/models` |
 | Cerebras | `https://api.cerebras.ai` | `https://api.cerebras.ai/v1/models` |
-| SambaNova | `https://api.sambanova.ai` | `https://api.sambanova.ai/v1/models` |
 | NVIDIA NIM | `https://integrate.api.nvidia.com` | `https://integrate.api.nvidia.com/v1/models` |
 | 硅基流动（中国站） | `https://api.siliconflow.cn` | `https://api.siliconflow.cn/v1/models` |
 | SiliconFlow（国际站） | `https://api.siliconflow.com` | `https://api.siliconflow.com/v1/models` |
@@ -48,7 +49,15 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 | Vertex AI / Model Garden | `https://us-central1-aiplatform.googleapis.com` | `/v1beta1/publishers/*/models`，读取所有厂商的目录和模型版本 |
 | 自定义 | 留空 | 使用你填写的地址 |
 
-OpenRouter、SambaNova、NVIDIA、Hugging Face 的公开模型目录当前可免密钥获取，提供商后续可能调整认证要求。其他模板需要对应提供商及区域的 API Key，最终可见的模型以接口和账号权限为准。模型目录可公开查询不代表模型推理服务免费。
+OpenRouter、NVIDIA、Hugging Face 的公开模型目录当前可免密钥获取，提供商后续可能调整认证要求。其他模板需要对应提供商及区域的 API Key，最终可见的模型以接口和账号权限为准。模型目录可公开查询不代表模型推理服务免费。
+
+### OpenRouter
+
+默认读取全部渠道、全部模型类型，不按提供商或模型厂商筛选。标准模型目录会自动补充 `output_modalities=all`，包含文本、图像、视频、语音、Embedding、重排等接口公开的类型，并完整读取分页。[OpenRouter 官方文档](https://openrouter.ai/docs/api/api-reference/models/get-models)说明，不传此参数时默认只返回支持文本输出的模型。
+
+此行为适用于 OpenRouter 官方地址和 OpenRouter 模板的标准 `/v1/models` 地址。自定义完整 API 已显式设置的 `output_modalities` 或其他筛选条件会保留；若要监控完整目录，请使用表中的无筛选地址。同一模型在多个托管渠道提供时，按 OR 的模型 ID 记录一次。
+
+首次成功获取完整目录后仅保存基线，随后监控变化，不集中推送已有模型。
 
 ### Google Gemini
 
@@ -86,8 +95,9 @@ OpenRouter、SambaNova、NVIDIA、Hugging Face 的公开模型目录当前可免
 | 更新间隔 | 默认 30 秒，每轮完成后等待此间隔；非法值按 30 秒处理 |
 | 代理地址 | 留空直连，不使用系统代理；支持 HTTP、HTTPS、SOCKS5、SOCKS5H |
 | 推送 UMO 白名单 | 每个条目独立，多选群聊或私聊；留空仅监控和保存快照 |
-| 检查内容 | 可选“仅模型 ID”或“模型 ID 和属性”；OpenRouter 默认仅模型 ID，其他模板默认模型 ID 和属性 |
-| 忽略属性路径 | 选择“模型 ID 和属性”时生效；排除不关心的字段 |
+| 检测项目（可多选，仅 OpenRouter） | 可组合选择新增/下架、价格、上下文、能力、停用日期等项目；全部取消则暂停变化通知 |
+| 检查内容（其他渠道） | 保留“仅模型 ID”或“模型 ID 和属性”单选，默认比较模型 ID 和全部原始属性 |
+| 忽略属性路径 | OpenRouter 在已选项目中排除属性；其他渠道在“模型 ID 和属性”模式中排除属性 |
 
 每个条目独立使用 HTTP 客户端和轮询任务，单次目录请求（包含必要的令牌刷新）最多等待 15 秒。目录接口使用 GET，认证方式由模板确定；自定义模板使用可选 Bearer 认证。Vertex 换取令牌使用 OAuth POST，不调用模型推理接口。
 
@@ -117,16 +127,35 @@ OpenRouter、SambaNova、NVIDIA、Hugging Face 的公开模型目录当前可免
 
 ### 属性变化
 
-在每个条目的“检查内容”下拉框中选择：
+**仅 OpenRouter 模板**将原“检查内容”改为“检测项目（可多选）”，可以同时勾选需要的项目，选中的项目显示为标签。以下分类依据 OR 返回的模型字段，不套用于其他渠道。同一轮的多个项目变化合并推送。
 
-- **仅模型 ID**：只推送模型新增、下架。已有模型的价格、描述等属性变化不会触发通知。
-- **模型 ID 和属性**：同时比较每个模型的全部 JSON 属性，可配合“忽略属性路径”排除字段。
+其他 16 个模板使用“检查内容”单选：“仅模型 ID”只检查新增/下架；“模型 ID 和属性”比较渠道返回的全部原始 JSON 属性，默认使用后者。支持忽略属性路径，数组顺序、价格字符串和供应商自定义字段均按原始值比较，不使用 OR 的字段分类或降噪规则。
 
-OpenRouter 默认选择“仅模型 ID”，避免动态属性产生频繁通知。其他模板默认选择“模型 ID 和属性”，所有条目均可手动切换。
+| 检测项目 | 字段范围 |
+| --- | --- |
+| 模型新增、下架 | 模型 ID 集合的增加、移除 |
+| 价格与计费规则 | `pricing`，包括缓存、图像、音频、搜索及条件计费规则 |
+| 上下文与输出长度 | `context_length`、`top_provider.context_length`、`top_provider.max_completion_tokens`、`per_request_limits` |
+| 输入、输出类型 | `architecture.modality`、`architecture.input_modalities`、`architecture.output_modalities` |
+| 工具调用与支持参数 | `supported_parameters` |
+| 推理能力与默认配置 | `reasoning`、`default_parameters`，包括默认采样参数 |
+| 语音音色 | `supported_voices` |
+| 停用日期 | `expiration_date` |
+| 模型别名指向 | `alias_target.slug`、`canonical_slug` |
+| 其他元数据（高级） | 未归入以上类别或评分的字段，如名称、描述、知识截止日期、分词器、审核信息和自定义字段 |
+| 评分与排行榜 | `benchmarks` |
 
-切换检查内容会清理旧模式的待发送通知，保留已有模型基线。从 0.0.6 或更早版本升级时，旧 OpenRouter 条目默认切换为“仅模型 ID”，并清理此前积压的通知，避免重新启用后继续刷屏；不需要删除或重建条目。
+每项独立生效。例如仅选择价格与停用日期时，不通知模型新增/下架或介绍修改。“其他元数据”不会重新启用取消勾选的价格、能力或评分类别。
 
-比较时忽略模型列表顺序和对象键顺序。选择属性比较时，属性中的数组保留顺序语义，字段增加、移除、类型或值变化会显示旧值与新值。
+新建 OpenRouter 条目默认只勾选模型新增、下架。建议按需增加价格、上下文、能力、停用日期和别名指向，评分项目默认不选。OR 全部取消时清除待发通知，继续更新原始快照；恢复勾选后不补发暂停期间的历史变化。
+
+OR 实际变更检测项目或忽略路径时清理旧规则的待发通知，保留快照；选择顺序或重复项不影响检测范围。
+
+自定义模板即使填写 OR 官方地址，也使用自定义模板的单选配置；需要分类多选时使用 OpenRouter 模板。
+
+OR 比较时忽略模型列表顺序、对象键顺序，以及模态、参数、音色、推理档位列表的顺序和重复项。其他数组仍保留顺序语义，尤其价格覆盖规则的优先级顺序。OR 列表通知展示新增/移除项，其他变化显示分类、字段路径和旧值/新值；从缺失或 `null` 补为有值时标注“信息补全”。这些是接口声明的变化，插件不执行模型能力测试。
+
+OR 价格使用十进制数值比较，`0.000001` 与 `0.0000010` 不触发通知；缺失、`null`、零和实际费率变化仍区分。OpenRouter 的完整时段费率表保持不变、且新旧报价都出现在该表中时，不将既定时段切换重复推送为调价。阶梯规则、未知条件、费率表本身的变化和未列出的报价仍会通知。目录报价只代表接口给出的主要供应商摘要，不是逐渠道实时报价；图像/视频专用规格和按秒等 SKU 价格需使用对应专用目录，本次未扩展额外接口。
 
 例如在忽略属性路径中分别添加：
 
@@ -135,7 +164,7 @@ updated_at
 pricing.prompt
 ```
 
-填写 `pricing` 会忽略整个价格对象；填写 `$` 则仅监控模型新增和下架。忽略路径相对于每个模型对象，而不是整个响应。修改忽略规则会同时应用于新旧快照。
+填写 `pricing` 会忽略整个价格对象；填写 `$` 则忽略所有属性，OR 仅在勾选“模型新增、下架”时推送目录增减，其他渠道仍推送模型新增/下架。忽略路径相对于每个模型对象，而不是整个响应。修改忽略规则会同时应用于新旧快照。
 
 ## UMO 会话选择
 
@@ -161,7 +190,6 @@ UMO 下拉选择依赖 AstrBot WebUI 的 `_special: "select_umos"` 配置组件�
 - 超时、HTTP 错误、JSON 格式或模型 ID 错误保留原基线；合法的空数组会产生模型下架通知。
 - 一次变化保存为通知后按目标发送，失败目标下轮重试；API 暂时失败时仍会重试旧通知。
 - 每个条目每轮向同一目标最多发送一条完整通知，积压消息按后续轮次处理，避免重启时连续集中推送。
-- 除检查模式切换时清理的旧队列外，升级前的分页通知会合并尚未发送的部分，已成功发送的部分不会重发。
 - 正常运行和重启恢复时跳过已记录成功的目标。平台接受消息后、进度保存前发生进程崩溃，或平台超时但实际已发送时，仍可能重复一条。
 - 获取失败的警告包含条目名称和 ID、API 类型、请求阶段（`catalog` 或 `oauth`；异常未附请求信息时为 `fetch`）、请求域名、是否配置代理、异常类型、HTTP 状态码及脱敏错误摘要。可据此区分具体条目，以及目录请求和 Google 令牌交换失败。
 - 错误摘要提取接口的错误码、类型和说明，合并为单行并限制为 512 字符；HTML/XML 错误页仅提示响应类型，超过 64 KiB 的响应不记录正文。日志不打印完整请求地址、请求认证头或完整响应，已知密钥、查询参数值及代理凭证会脱敏。配置文件中的密钥遵循 AstrBot 原有的配置存储方式。
@@ -186,6 +214,6 @@ ruff check data/plugins/astrbot_plugin_model_watcher
 
 插件源代码使用 Python 3.10 兼容语法；运行时仍须满足当前 AstrBot 的 Python 版本要求。
 
-测试覆盖全部 18 个配置模板的模拟认证和解析、分页、解析路径、非法响应、嵌套属性比较、去重、持久化、失败重试、目标变更、生命周期及单张长图和字体兜底。Vertex 测试使用本地生成的测试密钥和模拟 OAuth 响应，不需要真实凭证。
+现有测试使用模拟响应验证目录解析、检测规则、持久化、失败重试和通知渲染。Vertex 测试使用本地生成的测试密钥和模拟 OAuth 响应，不需要真实凭证。
 
 本地测试通过不代表已完成所有提供商的真实认证和平台送达验证；实际接口可用性、账号权限和平台图片限制需要单独实测。

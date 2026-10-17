@@ -235,7 +235,8 @@ def test_non_http_failures_retain_safe_reason(spec, error_type):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_stage", ["oauth", "catalog"])
 async def test_vertex_failures_hide_service_account_and_runtime_tokens(
-    service_key, fail_stage
+    service_key,  # noqa: F811
+    fail_stage,
 ):
     info = service_key[0]
     spec = WatchSpec.from_entry(

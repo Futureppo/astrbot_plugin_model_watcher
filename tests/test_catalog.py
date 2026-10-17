@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from data.plugins.astrbot_plugin_model_watcher.catalog import (
+    CHECK_LABELS,
     WatchSpec,
     compare_catalogs,
     fetch_catalog,
@@ -30,7 +31,26 @@ def spec_factory():
     [
         ("https://example.test/", "", "https://example.test/v1/models"),
         ("https://example.test/v1/", "", "https://example.test/v1/models"),
-        ("https://openrouter.ai/api", "", "https://openrouter.ai/api/v1/models"),
+        (
+            "https://openrouter.ai/api",
+            "",
+            "https://openrouter.ai/api/v1/models?output_modalities=all",
+        ),
+        (
+            "",
+            "https://openrouter.ai/api/v1/models/?limit=100",
+            "https://openrouter.ai/api/v1/models/?limit=100&output_modalities=all",
+        ),
+        (
+            "",
+            "https://openrouter.ai/api/v1/models?output_modalities=image",
+            "https://openrouter.ai/api/v1/models?output_modalities=image",
+        ),
+        (
+            "",
+            "https://openrouter.ai/api/v1/embeddings/models",
+            "https://openrouter.ai/api/v1/embeddings/models",
+        ),
         (
             "ignored",
             "https://example.test/catalog?type=all",
@@ -106,6 +126,54 @@ async def test_fetch_authentication_and_pagination(spec_factory, key):
         request.headers.get("Authorization") == (f"Bearer {key}" if key else None)
         for request in requests
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"base_url": "https://openrouter.ai/api"},
+        {"full_url": "https://openrouter.ai/api/v1/models?limit=2"},
+        {"__template_key": "openrouter", "base_url": "https://relay.test/api"},
+    ],
+)
+async def test_openrouter_fetches_all_model_types_and_providers(spec_factory, entry):
+    rows = [
+        {"id": "vendor-a/chat", "architecture": {"output_modalities": ["text"]}},
+        {"id": "vendor-b/image", "architecture": {"output_modalities": ["image"]}},
+        {"id": "vendor-c/video", "architecture": {"output_modalities": ["video"]}},
+        {"id": "vendor-d/audio", "architecture": {"output_modalities": ["audio"]}},
+        {"id": "vendor-e/embed", "architecture": {"output_modalities": ["embeddings"]}},
+        {"id": "vendor-f/rerank", "architecture": {"output_modalities": ["rerank"]}},
+        {"id": "vendor-g/speech", "architecture": {"output_modalities": ["speech"]}},
+        {
+            "id": "vendor-h/asr",
+            "architecture": {"output_modalities": ["transcription"]},
+        },
+        {"id": "vendor-i/guard", "architecture": {"output_modalities": ["decisions"]}},
+    ]
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        assert "providers" not in request.url.params
+        assert "model_authors" not in request.url.params
+        if request.url.params.get("output_modalities") != "all":
+            return httpx.Response(200, json={"data": rows[:1]})
+        offset = int(request.url.params.get("offset", "0"))
+        next_url = (
+            str(request.url.copy_set_param("offset", offset + 2))
+            if offset + 2 < len(rows)
+            else None
+        )
+        return httpx.Response(
+            200, json={"data": rows[offset : offset + 2], "links": {"next": next_url}}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        models = await fetch_catalog(client, spec_factory(**entry))
+    assert models == {row["id"]: row for row in rows}
+    assert len(requests) == 5
 
 
 @pytest.mark.asyncio
@@ -274,7 +342,7 @@ def test_all_provider_templates_and_defaults():
     assert schema["providers"]["default"] == []
     templates = schema["providers"]["templates"]
     expected_endpoints = {
-        "openrouter": "https://openrouter.ai/api/v1/models",
+        "openrouter": "https://openrouter.ai/api/v1/models?output_modalities=all",
         "openai": "https://api.openai.com/v1/models",
         "xai": "https://api.x.ai/v1/models",
         "kimi": "https://api.moonshot.cn/v1/models",
@@ -283,7 +351,6 @@ def test_all_provider_templates_and_defaults():
         "groq": "https://api.groq.com/openai/v1/models",
         "mistral": "https://api.mistral.ai/v1/models",
         "cerebras": "https://api.cerebras.ai/v1/models",
-        "sambanova": "https://api.sambanova.ai/v1/models",
         "nvidia": "https://integrate.api.nvidia.com/v1/models",
         "siliconflow": "https://api.siliconflow.cn/v1/models",
         "siliconflow_intl": "https://api.siliconflow.com/v1/models",
@@ -300,6 +367,7 @@ def test_all_provider_templates_and_defaults():
             for field, meta in template["items"].items()
         }
         entry["entry_id"] = key
+        entry["__template_key"] = key
         if key == "custom":
             entry["full_url"] = "https://example.test/catalog"
         spec = WatchSpec.from_entry(entry)
@@ -309,35 +377,48 @@ def test_all_provider_templates_and_defaults():
             "vertex": "publisherModels",
         }.get(key, "data")
         assert spec.interval == 30 and spec.targets == ()
-        assert spec.comparison_mode == (
-            "仅模型 ID" if key == "openrouter" else "模型 ID 和属性"
-        )
+        mode = template["items"]["comparison_mode"]
+        if key == "openrouter":
+            assert spec.comparison_mode == ("membership",)
+            assert mode["type"] == "list"
+            assert mode["options"] == list(CHECK_LABELS)
+            assert mode["labels"] == list(CHECK_LABELS.values())
+        else:
+            assert spec.comparison_mode == tuple(CHECK_LABELS)
+            assert mode["type"] == "string"
+            assert mode["default"] == "模型 ID 和属性"
+            assert mode["options"] == ["仅模型 ID", "模型 ID 和属性"]
+            assert "labels" not in mode
         assert template["items"]["umo_whitelist"]["_special"] == "select_umos"
 
 
 @pytest.mark.parametrize(
     "entry,expected",
     [
-        ({"base_url": "https://openrouter.ai/api"}, "仅模型 ID"),
+        (
+            {"base_url": "https://openrouter.ai/api", "__template_key": "openrouter"},
+            ("membership",),
+        ),
         (
             {
                 "base_url": "https://relay.test",
                 "__template_key": "openrouter",
                 "name": "Renamed",
             },
-            "仅模型 ID",
+            ("membership",),
         ),
-        ({"base_url": "https://other.test"}, "模型 ID 和属性"),
+        ({"base_url": "https://other.test"}, tuple(CHECK_LABELS)),
         (
             {
                 "base_url": "https://openrouter.ai/api",
-                "comparison_mode": "模型 ID 和属性",
+                "__template_key": "openrouter",
+                "comparison_mode": ["pricing", "lifecycle"],
             },
-            "模型 ID 和属性",
+            ("pricing", "lifecycle"),
         ),
         (
             {"base_url": "https://other.test", "comparison_mode": "仅模型 ID"},
-            "仅模型 ID",
+            ("membership",),
         ),
     ],
 )
@@ -356,5 +437,5 @@ def test_ids_only_preserves_membership_changes_without_copying_attributes():
         {"old": {}, "same": Uncopyable()},
         {"new": {}, "same": Uncopyable()},
         (),
-        compare_attributes=False,
+        checks=("membership",),
     ) == {"added": ["new"], "removed": ["old"], "changed": {}}

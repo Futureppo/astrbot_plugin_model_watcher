@@ -73,6 +73,11 @@ class ModelWatcher(star.Star):
                     type(exc).__name__,
                 )
                 continue
+            saved_mode = (
+                list(spec.comparison_mode)
+                if spec.is_openrouter
+                else entry.get("comparison_mode", "模型 ID 和属性")
+            )
             if str(entry.get("interval_seconds", 30)) != str(spec.interval):
                 logger.warning(
                     "Model watcher entry %s has an invalid interval; using 30 seconds.",
@@ -92,30 +97,29 @@ class ModelWatcher(star.Star):
                     "pending": [],
                 }
                 self._state["entries"][entry_id] = state
-            # Old entries compared all attributes. Discard obsolete deliveries
-            # when switching rules, but retain the raw catalog baseline.
-            if state.get("comparison_mode", "模型 ID 和属性") != spec.comparison_mode:
+            # Rule changes discard queued notifications but retain the baseline.
+            if (
+                state.get("comparison_mode") != saved_mode
+                or not spec.comparison_mode
+                or (
+                    spec.is_openrouter
+                    and set(state.get("ignored_paths", spec.ignored_paths))
+                    != set(spec.ignored_paths)
+                )
+            ):
                 state["pending"] = []
-            state["comparison_mode"] = spec.comparison_mode
+            state["comparison_mode"] = saved_mode
+            if spec.is_openrouter:
+                state["ignored_paths"] = list(spec.ignored_paths)
+            else:
+                state.pop("ignored_paths", None)
             pending = []
             for notice in state["pending"]:
-                if "text" in notice:
-                    targets = [
-                        target for target in notice["targets"] if target in spec.targets
-                    ]
-                    if targets:
-                        pending.append({"text": notice["text"], "targets": targets})
-                    continue
-                # Preserve only the unsent part of each legacy paginated notice.
-                pages = notice["pages"]
-                remaining: dict[int, list[str]] = {}
-                for target, cursor in notice["targets"].items():
-                    if target in spec.targets and 0 <= cursor < len(pages):
-                        remaining.setdefault(cursor, []).append(target)
-                for cursor, targets in remaining.items():
-                    pending.append(
-                        {"text": "\n\n".join(pages[cursor:]), "targets": targets}
-                    )
+                targets = [
+                    target for target in notice["targets"] if target in spec.targets
+                ]
+                if targets:
+                    pending.append({"text": notice["text"], "targets": targets})
             state["pending"] = pending
         if changed:
             self.config.save_config()
@@ -197,7 +201,8 @@ class ModelWatcher(star.Star):
                         previous,
                         current,
                         spec.ignored_paths,
-                        compare_attributes=spec.comparison_mode == "模型 ID 和属性",
+                        checks=spec.comparison_mode,
+                        openrouter=spec.is_openrouter,
                     )
                     if changes["added"] or changes["removed"] or changes["changed"]:
                         zone_name = str(
@@ -212,6 +217,7 @@ class ModelWatcher(star.Star):
                         except (ValueError, ZoneInfoNotFoundError):
                             detected_at = datetime.now().astimezone()
                         notice = {
+                            "openrouter": spec.is_openrouter,
                             "name": spec.name,
                             "base_url": spec.base_url,
                             "time": detected_at.strftime("%Y-%m-%d %H:%M:%S %z"),
