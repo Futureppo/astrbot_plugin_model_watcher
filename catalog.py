@@ -21,11 +21,11 @@ _PRIVATE_REQUEST = ContextVar("model_watcher_private_request", default=False)
 
 CARD_TEMPLATE_LABELS = {
     "classic": "原版",
-    "light": "A · 浅色卡片",
-    "dark": "B · 深色监控台",
-    "diff": "C · 差异对照",
-    "soft": "D · 柔和彩色卡片",
-    "bold": "E · 粗边框拼色",
+    "light": "浅色卡片",
+    "dark": "深色监控台",
+    "diff": "差异对照",
+    "soft": "柔和彩色卡片",
+    "bold": "粗边框拼色",
 }
 
 DEEPSEEK_CARD_TEMPLATE_LABELS = {
