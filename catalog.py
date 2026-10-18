@@ -28,6 +28,10 @@ CARD_TEMPLATE_LABELS = {
     "bold": "E · 粗边框拼色",
 }
 
+DEEPSEEK_CARD_TEMPLATE_LABELS = {
+    "deepseek_meme": "DeepSeek 梗图",
+}
+
 CHECK_LABELS = {
     "membership": "模型新增、下架",
     "pricing": "价格与计费规则",
@@ -450,9 +454,9 @@ class WatchSpec:
             identity.append(api_type)
         fingerprint = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
         card_template = entry.get("card_template", "classic")
-        if (
-            not isinstance(card_template, str)
-            or card_template not in CARD_TEMPLATE_LABELS
+        if not isinstance(card_template, str) or (
+            card_template not in CARD_TEMPLATE_LABELS
+            and not (is_deepseek and card_template in DEEPSEEK_CARD_TEMPLATE_LABELS)
         ):
             raise ValueError("Invalid notification card template")
         return cls(

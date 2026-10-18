@@ -1,0 +1,25 @@
+DeepSeek meme template assets
+
+The following five images were supplied by the plugin author on 2026-10-18:
+
+fingerprint.jpg — Dedicated backend fingerprint reaction photograph.
+added.jpg — New model arrival, carrying the Whale-chan character.
+removed.jpg — Model removal reaction, carrying the Whale-chan character away.
+context-question.jpg, context-answer.jpg — Two speech photographs for length-change dialogue.
+
+The unified template embeds these files without external image requests.
+Captions are meme text, not attributed quotations.
+
+name.jpg, provider.jpg, modalities.jpg, reasoning.jpg, api-capabilities.jpg,
+metadata.jpg, mixed.jpg
+Seven additional event illustrations generated with built-in image_gen on
+2026-10-18, using the supplied images as identity and mixed-media references.
+Scenes: model name, provider, modalities, reasoning, API capabilities,
+metadata, and mixed changes. The mixed-change scene received a localized
+correction to remove an extra illustrated hand.
+The final images include event-specific facial-expression edits generated
+with built-in image_gen.
+The name-change scene also uses a simpler single-visible-hand pose.
+Only the final images used by the template are distributed with the plugin.
+All artwork uses lowercase English filenames and JPEG format. Conversion
+preserves the original pixel dimensions; existing JPEGs are not recompressed.

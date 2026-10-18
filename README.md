@@ -37,12 +37,15 @@ https://github.com/Futureppo/astrbot_plugin_model_watcher
 | C · 差异对照 | 红绿底色，逐行对照旧值和新值 |
 | D · 柔和彩色卡片 | 大圆角、胶囊标签和并排模型卡片 |
 | E · 粗边框拼色 | 黑色描边、硬阴影和拼色区块 |
+| DeepSeek 梗图（仅 DeepSeek） | 指纹专用照片、新增/移除拎鲸鱼娘、上下文双格对话、名单交接并排梗图 |
 
-A～E 是所有提供商共用的模板，使用 AstrBot 已配置的 HTML 图片渲染服务；未配置地址时使用 AstrBot 的默认渲染服务，通知内容会发送到该服务。插件不需要安装浏览器。新模板渲染失败时尝试原版本地图片，再失败才使用完整文字通知。
+A～E 是所有提供商共用的模板；“DeepSeek 梗图”仅在 DeepSeek 条目的下拉框中显示。它们使用 AstrBot 已配置的 HTML 图片渲染服务；未配置地址时使用 AstrBot 的默认渲染服务，通知内容会发送到该服务。插件不需要安装浏览器。新模板渲染失败时尝试原版本地图片，再失败才使用完整文字通知。
+
+DeepSeek 梗图按检查类型使用专属素材：指纹变化使用 `fingerprint.jpg`，仅新增、仅移除分别使用 `added.jpg`、`removed.jpg`；单独的上下文与输出长度变化（包括减少、字段补全和多个长度字段同时变更）使用 `context-question.jpg`、`context-answer.jpg` 双格对话。仅模型名单增减使用“拎进来／拎出去”并排画面；名称、提供商、输入输出类型、推理档位、API 能力、其他元数据分别使用对应的真人与 Q 版鲸鱼娘专属配图和台词，同轮跨类型的混合变化使用长清单配图。“也就翻了一倍”仅用于全部变更均为上下文恰好翻倍的通知；减少、普通扩容及混合方向分别选用合适台词。多模型和多项变化在同一张图中完整展开，长文本自动换行。全部配图集中在 `templates/deepseek/`，采用按用途命名的小写英文文件名和 JPG 格式，保留原始像素尺寸。图片素材随插件附带，渲染时内嵌，不依赖临时预览目录或外部图片链接；[素材来源](templates/deepseek/sources.txt)。
 
 选择模板只改变通知外观，不重置模型列表或指纹基线，不改变检查内容和推送目标。待发送通知保存结构化变更，重载后按当前所选模板重试；此前仅保存文字的待发送通知仍使用原版图片。API Key 和请求认证头不进入模板数据。
 
-模板资源集中在 `templates/`，数据整理在 `card_templates.py`。后续提供商专属模板可增加独立资源，并只在对应提供商的下拉框里添加选项；现有 A～E 保持共用。
+模板资源集中在 `templates/`，数据整理在 `card_templates.py`，DeepSeek 梗图事件选择在 `deepseek_templates.py`。后续提供商专属模板可增加独立资源，并只在对应提供商的下拉框里添加选项；现有 A～E 保持共用。
 
 样式参考：[shadcn/ui](https://ui.shadcn.com/blocks?category=dashboard)、[Grafana](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/stat/)、[GitHub Primer](https://primer.style/product/getting-started/react/theme-reference/)、[Material Web](https://github.com/material-components/material-web/blob/main/docs/theming/color.md)、[Neobrutalism components](https://www.neobrutalism.dev/docs/card)。这些通知模板按其设计风格重新排版。
 

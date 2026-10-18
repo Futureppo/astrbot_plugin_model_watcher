@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1080">
+  <style>/* MEME_STYLES */</style>
+</head>
+<body class="{{ layout|e }} event-{{ event|e }} {{ mode|e }}">
+  <main class="meme">
+    <header class="scene">
+      {% if layout == 'dialogue' %}
+      {% for art in artworks %}
+      <div class="panel {{ 'first' if loop.first else 'second' }}">
+        <div class="caption">{{ headline|e if loop.first else punchline|e }}</div>
+        <img src="{{ art.src|e }}" alt="{{ art.name|e }}">
+      </div>
+      {% endfor %}
+      {% else %}
+      <h1 class="headline">{{ headline|e }}</h1>
+      <div class="pictures">
+        {% for art in artworks %}
+        <figure>
+          <div class="artwork"><img src="{{ art.src|e }}" alt="{{ art.name|e }}"></div>
+          {% if layout == 'lineup' %}<figcaption>{{ '拎进来' if loop.first else '拎出去' }}</figcaption>{% endif %}
+        </figure>
+        {% endfor %}
+      </div>
+      <div class="punchline">{{ punchline|e }}</div>
+      {% endif %}
+    </header>
+    <div class="details">
+      {% for status, label, ids in [('added', '＋ 新增模型', added), ('removed', '− 本次列表未返回', removed)] %}
+      {% if ids %}
+      <section class="membership {{ status }}">
+        <h2>{{ label }}</h2>
+        {% for id in ids %}<code class="model-id">{{ id|e }}</code>{% endfor %}
+      </section>
+      {% endif %}
+      {% endfor %}
+      {% for model in models %}
+      <section class="model">
+        <h2 class="model-id">{{ model.id|e }}</h2>
+        {% for field in model.fields %}
+        <div class="field">
+          <div class="field-name">{{ field.label|e }} <code>{{ field.path|e }}</code>{% if field.note %}<span class="note">{{ field.note|e }}</span>{% endif %}</div>
+          {% if field.summary %}<div class="summary">{{ field.summary|e }}</div>{% endif %}
+          <div class="value old"><span>旧{{ '指纹' if field.path == 'system_fingerprint' else '值' }}</span><code>{{ field.old|e }}</code></div>
+          <div class="value new"><span>新{{ '指纹' if field.path == 'system_fingerprint' else '值' }}</span><code>{{ field.new|e }}</code></div>
+        </div>
+        {% endfor %}
+      </section>
+      {% endfor %}
+    </div>
+    <footer>
+      <div class="identity"><strong>{{ name|e }}</strong><span>{{ date|e }} {{ time|e }}</span></div>
+      <div class="endpoint">{{ base_url|e }}</div>
+      <div class="counts">当前 {{ total|e }} 个模型 · 新增 {{ added|length }} · 列表移除 {{ removed|length }} · 属性变化 {{ models|length }}</div>
+      <div class="repository">github.com/Futureppo/astrbot_plugin_model_watcher</div>
+    </footer>
+  </main>
+</body>
+</html>

@@ -12,6 +12,7 @@ from data.plugins.astrbot_plugin_model_watcher import renderer
 from data.plugins.astrbot_plugin_model_watcher.card_templates import build_card_template
 from data.plugins.astrbot_plugin_model_watcher.catalog import (
     CARD_TEMPLATE_LABELS,
+    DEEPSEEK_CARD_TEMPLATE_LABELS,
     WatchSpec,
 )
 
@@ -109,8 +110,11 @@ def test_oversized_image_fails_before_allocation(monkeypatch):
         renderer.render_card("model\n" * 1500)
 
 
-@pytest.mark.parametrize("template_key", ["light", "dark", "diff", "soft", "bold"])
-def test_shared_templates_preserve_data_and_escape_markup(notice, template_key):
+@pytest.mark.parametrize(
+    "template_key",
+    ["light", "dark", "diff", "soft", "bold", "deepseek_meme"],
+)
+def test_html_templates_preserve_data_and_escape_markup(notice, template_key):
     notice["name"] = '<img src="https://example.test">{{7*7}}'
     notice["deepseek"] = True
     notice["changes"]["changed"] = {
@@ -158,17 +162,71 @@ def test_every_provider_offers_shared_templates():
     for key, provider in schema["providers"]["templates"].items():
         field = provider["items"]["card_template"]
         assert field["type"] == "string" and field["default"] == "classic"
-        assert field["options"] == list(CARD_TEMPLATE_LABELS)
-        assert field["labels"] == list(CARD_TEMPLATE_LABELS.values())
+        choices = dict(CARD_TEMPLATE_LABELS)
+        if key == "deepseek":
+            choices.update(DEEPSEEK_CARD_TEMPLATE_LABELS)
+        assert field["options"] == list(choices)
+        assert field["labels"] == list(choices.values())
         entry = {name: item["default"] for name, item in provider["items"].items()}
         entry.update(entry_id=key, __template_key=key)
         if key == "custom":
             entry["full_url"] = "https://example.test/models"
         assert WatchSpec.from_entry(entry).card_template == "classic"
-        for template_key in CARD_TEMPLATE_LABELS:
+        for template_key in choices:
             assert (
                 WatchSpec.from_entry(
                     dict(entry, card_template=template_key)
                 ).card_template
                 == template_key
             )
+        if key != "deepseek":
+            for template_key in DEEPSEEK_CARD_TEMPLATE_LABELS:
+                with pytest.raises(ValueError, match="card template"):
+                    WatchSpec.from_entry(dict(entry, card_template=template_key))
+
+
+def test_meme_reactions_respect_direction_and_mixed_changes(notice):
+    template_key = "deepseek_meme"
+    notice["deepseek"] = True
+    changes = notice["changes"]
+    changes.update(added=[], removed=[])
+    field = {
+        "path": "context_window",
+        "old": 1024,
+        "new": 2048,
+        "old_exists": True,
+        "new_exists": True,
+    }
+    changes["changed"] = {"deepseek-flash": [field]}
+    _, data = build_card_template(notice, template_key)
+    assert data["event"] == "context_up"
+    assert all(art["src"].startswith("data:image/") for art in data["artworks"])
+    assert [art["name"] for art in data["artworks"]] == [
+        "context-question",
+        "context-answer",
+    ]
+    assert data["punchline"].replace("\n", "") == "也就翻了一倍"
+    field["new"] = 512
+    _, data = build_card_template(notice, template_key)
+    assert data["event"] == "context_down"
+    assert [art["name"] for art in data["artworks"]] == [
+        "context-question",
+        "context-answer",
+    ]
+    field.update(old=None, old_exists=False, new=2048)
+    _, data = build_card_template(notice, template_key)
+    assert data["event"] == "context_change"
+    assert data["models"][0]["fields"][0]["note"] == "信息补全"
+    changes["removed"] = ["old-model"]
+    _, data = build_card_template(notice, template_key)
+    assert data["event"] == "mixed"
+    assert data["artworks"][0]["name"] == "mixed"
+    assert data["removed"] == ["old-model"] and len(data["models"]) == 1
+    changes["changed"] = {}
+    _, data = build_card_template(notice, template_key)
+    assert data["event"] == "removed"
+    assert data["artworks"][0]["name"] == "removed"
+    changes["added"] = ["new-model"]
+    _, data = build_card_template(notice, template_key)
+    assert data["layout"] == "lineup"
+    assert [art["name"] for art in data["artworks"]] == ["added", "removed"]

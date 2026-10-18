@@ -11,12 +11,14 @@ from .catalog import (
     CARD_TEMPLATE_LABELS,
     CHECK_LABELS,
     DEEPSEEK_ATTRIBUTE_GROUPS,
+    DEEPSEEK_CARD_TEMPLATE_LABELS,
     DEEPSEEK_CHECK_LABELS,
     DEEPSEEK_SET_PATHS,
     PROVIDER_ATTRIBUTE_GROUPS,
     PROVIDER_CHECK_LABELS,
     SET_PATHS,
 )
+from .deepseek_templates import build_deepseek_meme
 
 
 def build_card_template(
@@ -26,7 +28,7 @@ def build_card_template(
 
     Args:
         notification: Provider, timestamp, model count, and complete change details.
-        template_key: One of the shared HTML card template identifiers.
+        template_key: A shared or provider-specific HTML template identifier.
 
     Returns:
         Jinja2 template and data for AstrBot's HTML renderer.
@@ -35,16 +37,13 @@ def build_card_template(
         ValueError: The requested HTML template is not supported.
         OSError: A packaged template asset cannot be read.
     """
-    if template_key not in CARD_TEMPLATE_LABELS or template_key == "classic":
-        raise ValueError("Unknown HTML card template")
-    directory = Path(__file__).with_name("templates")
-    template = (directory / "card.html").read_text(encoding="utf-8")
-    css = (directory / "shared.css").read_text(encoding="utf-8")
-    css += (directory / f"{template_key}.css").read_text(encoding="utf-8")
-    # Only packaged CSS enters the template source; API content stays in data.
-    template = template.replace("/* CARD_STYLES */", css)
-    changes = notification["changes"]
     deepseek = notification.get("deepseek", False)
+    meme = deepseek and template_key in DEEPSEEK_CARD_TEMPLATE_LABELS
+    if not meme and (
+        template_key not in CARD_TEMPLATE_LABELS or template_key == "classic"
+    ):
+        raise ValueError("Unknown HTML card template")
+    changes = notification["changes"]
     openrouter = notification.get("openrouter", False)
     provider = notification.get("provider", "")
     categorized = deepseek or openrouter or provider in PROVIDER_CHECK_LABELS
@@ -105,7 +104,7 @@ def build_card_template(
         models.append({"id": model_id, "fields": rendered_fields})
     fingerprints = notification.get("fingerprints", False)
     date, _, time = str(notification["time"]).partition(" ")
-    return template, {
+    data = {
         "name": str(notification["name"]),
         "base_url": notification.get("base_url") or "（未填写基础 API）",
         "date": date,
@@ -119,3 +118,11 @@ def build_card_template(
         "removed": changes["removed"],
         "models": models,
     }
+    if meme:
+        return build_deepseek_meme(notification, data)
+    directory = Path(__file__).with_name("templates")
+    template = (directory / "card.html").read_text(encoding="utf-8")
+    css = (directory / "shared.css").read_text(encoding="utf-8")
+    css += (directory / f"{template_key}.css").read_text(encoding="utf-8")
+    # Only packaged CSS enters the template source; API content stays in data.
+    return template.replace("/* CARD_STYLES */", css), data
